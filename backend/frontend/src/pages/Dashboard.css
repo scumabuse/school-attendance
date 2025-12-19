@@ -1,0 +1,304 @@
+.teacher-dashboard {
+  padding: 20px;
+  font-family: 'Segoe UI', sans-serif;
+}
+
+.dashboard-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 20px;
+}
+
+.subtitle {
+  color: #666;
+  margin-bottom: 20px;
+}
+
+.logout-btn {
+  padding: 10px 20px;
+  background-color: #f44336;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.logout-btn:hover {
+  background-color: #d32f2f;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(244, 67, 54, 0.3);
+}
+
+.logout-btn:active {
+  transform: translateY(0);
+}
+
+.filters {
+  display: flex;
+  gap: 15px;
+  margin-bottom: 30px;
+  flex-wrap: wrap;
+}
+
+.search-box {
+  position: relative;
+  flex: 1 1 10px;
+}
+
+.search-box input {
+  width: 90%;
+  padding: 12px 40px 12px 15px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  font-size: 16px;
+}
+
+.search-icon {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #999;
+}
+
+.filters select {
+  padding: 12px 15px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  font-size: 16px;
+  min-width: 180px;
+}
+
+.groups-scroll {
+  overflow-y: auto;
+  overflow-x: hidden; 
+  padding: 10px 0;
+}
+
+.groups-container {
+  display: flex;              /* вместо grid */
+  flex-wrap: wrap;            /* разрешить перенос на следующую строку */
+  justify-content: flex-start; /* или center, если хочешь по центру */
+  gap: 20px;
+  padding: 10px 0;
+  min-width: unset;           /* убираем min-width: max-content */
+}
+
+.group-card {
+  background: white;
+  border-radius: 15px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  padding: 16px;
+  flex: 1 1 400px;             /* гибкая ширина: минимум 400px, растягивается */
+  max-width: 500px;           /* ограничиваем максимум, чтобы не раздувались */
+  box-sizing: border-box;
+}
+
+.group-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #eee;
+}
+
+.group-header h3 {
+  margin: 0;
+  color: #1976d2;
+  font-size: 18px;
+}
+
+.student-count {
+  font-size: 14px;
+  color: #555;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.stat {
+  text-align: center;
+}
+
+.stat .label {
+  display: block;
+  font-size: 13px;
+  color: #666;
+  margin-bottom: 4px;
+}
+
+.stat .value {
+  font-size: 24px;
+  font-weight: bold;
+}
+
+.present { color: #4caf50; }
+.absent { color: #f44336; }
+.valid { color: #1b4f9c; }
+.sick { color: #ff9800; }
+.wsk { color: #9c27b0; }
+.dual { color: #0ea5e9; }
+.late { color: #d97706; }
+.marked { color: #2196f3; }
+.unmarked { color: #757575; }
+
+.no-groups {
+  color: #999;
+  text-align: center;
+  width: 100%;
+  padding: 40px;
+}
+
+.loading {
+  text-align: center;
+  padding: 50px;
+  font-size: 18px;
+  color: #666;
+}
+
+.back-to-top {
+  position: fixed;
+  bottom: env(safe-area-inset-bottom, 20px); /* Ключевое исправление! */
+  bottom: calc(env(safe-area-inset-bottom, 20px) + 20px); /* + доп. отступ */
+  right: 16px;
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  background-color: #1976d2;
+  color: white;
+  border: none;
+  font-size: 28px;
+  font-weight: bold;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+  cursor: pointer;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(20px);
+}
+
+.back-to-top.visible {
+  opacity: 0.9;
+  visibility: visible;
+  transform: translateY(0);
+}
+
+/* Мобильные — уменьшаем и поднимаем выше */
+@media (max-width: 768px) {
+  .back-to-top {
+    width: 48px;
+    height: 48px;
+    font-size: 26px;
+    right: 16px;
+    bottom: calc(env(safe-area-inset-bottom, 16px) + 16px); /* Автоматически выше панели */
+  }
+}
+
+@media (max-width: 480px) {
+  .back-to-top {
+    width: 44px;
+    height: 44px;
+    font-size: 24px;
+    bottom: calc(env(safe-area-inset-bottom, 12px) + 12px);
+  }
+}
+
+@media (max-width: 868px) {
+  .teacher-dashboard {
+    padding: 16px;
+  }
+
+  .dashboard-header {
+    flex-direction: column;
+    gap: 15px;
+  }
+
+  .logout-btn {
+    align-self: flex-end;
+  }
+
+  .filters {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+    margin-bottom: 20px;
+  }
+
+  .search-box {
+    min-width: unset;
+  }
+
+  .filters select {
+    width: 100%;
+  }
+
+  .groups-container {
+    grid-template-columns: 1fr; /* одна карточка в ряд */
+    gap: 20px;
+  }
+
+  .group-card {
+    padding: 18px;
+  }
+
+  .stats-grid {
+    gap: 14px 16px;
+  }
+
+  .stat .value {
+    font-size: 28px;
+  }
+}
+
+/* Телефоны (480px и меньше) */
+@media (max-width: 480px) {
+  .teacher-dashboard {
+    padding: 12px;
+  }
+
+  .subtitle {
+    font-size: 15px;
+  }
+
+  .group-header h3 {
+    font-size: 17px;
+  }
+
+  .filters {
+    gap: 8px;           /* Ещё ближе */
+    margin-bottom: 16px;
+  }
+
+  .student-count {
+    font-size: 14px;
+  }
+
+  .student-count span {
+    font-size: 22px;
+  }
+
+  .stat .label {
+    font-size: 13px;
+  }
+
+  .stat .value {
+    font-size: 26px;
+  }
+
+  .stats-grid {
+    gap: 12px;
+  }
+}
