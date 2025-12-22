@@ -763,81 +763,97 @@ app.get('/api/attendance/stats/summary', authenticate, isHeadOrAdmin, async (req
     const { type = 'academic_year', start, end } = req.query;
     const range = getDateRange(type, start, end);
 
-    // Получаем праздники за период (только даты)
     const holidays = await prisma.holiday.findMany({
-      where: {
-        date: { gte: range.start, lte: range.end }
-      },
+      where: { date: { gte: range.start, lte: range.end } },
       select: { date: true }
     });
     const holidayDates = holidays.map(h => h.date);
 
-    // Получаем группы с количеством студентов (без загрузки студентов и attendances!)
     const groups = await prisma.group.findMany({
       select: {
         id: true,
         name: true,
-        _count: {
-          select: { students: true }
-        }
+        _count: { select: { students: true } }
       }
     });
 
     const summary = [];
 
     for (const group of groups) {
-      // Запрашиваем ТОЛЬКО записи посещаемости за нужный период и только нужные поля
-      const attendanceRecords = await prisma.attendance.findMany({
-        where: {
-          groupId: group.id,
-          date: { gte: range.start, lte: range.end }
-        },
-        select: {
-          date: true,
-          status: true
+      let stats;
+      if (type === 'today') {
+        const todayRecords = await prisma.attendance.findMany({
+          where: {
+            groupId: group.id,
+            date: { gte: range.start, lte: range.end }
+          },
+          select: { status: true }
+        });
+
+        const markedCount = todayRecords.length;
+        const totalStudents = group._count.students;
+
+        let presentCount = 0;
+        let absentCount = 0;
+
+        todayRecords.forEach(r => {
+          if (['PRESENT', 'VALID_ABSENT', 'ITHUB', 'DUAL', 'LATE'].includes(r.status)) {
+            presentCount++;
+          } else if (r.status === 'ABSENT') {
+            absentCount++;
+          }
+        });
+
+        let percent;
+        if (totalStudents === 0) {
+          percent = 100;
+        }else if (markedCount === 0) {
+          percent = 0; // никто не отмечен — 0%
+        } else {
+          const total = presentCount + absentCount;
+          percent = total > 0 ? Math.round((presentCount / total) * 100) : 0;
         }
-      });
 
-      // Передаём в калькулятор
-      const stats = await calculateAttendance(
-        attendanceRecords,
-        holidayDates,
-        range.start,
-        range.end
-      );
+          stats = { percent };
 
-      summary.push({
-        groupId: group.id,
-        groupName: group.name,
-        percent: Math.round(stats.percent || 0),
-        studentsCount: group._count.students
+        } else {
+          // Для других периодов — обычная логика
+          const records = await prisma.attendance.findMany({
+            where: {
+              groupId: group.id,
+              date: { gte: range.start, lte: range.end }
+            },
+            select: { date: true, status: true }
+          });
+
+          stats = await calculateAttendance(records, holidayDates, range.start, range.end);
+        }
+
+        summary.push({
+          groupId: group.id,
+          groupName: group.name,
+          percent: Math.round(stats.percent || 0),
+          studentsCount: group._count.students
+        });
+      }
+
+      // Добавляем нулевые группы, чтобы не исчезали
+      const sorted = [...summary].sort((a, b) => b.percent - a.percent);
+
+      const avg = sorted.length ? Math.round(sorted.reduce((a, b) => a + b.percent, 0) / sorted.length) : 100;
+
+      res.json({
+        period: type === 'custom' ? `${start} → ${end}` : type,
+        averagePercent: avg,
+        bestGroup: sorted[0] || null,
+        worstGroup: sorted[sorted.length - 1] || null,
+        groups: sorted
       });
+    } catch (err) {
+      console.error('Ошибка в /stats/summary:', err);
+      res.status(500).json({ error: 'Ошибка сервера' });
     }
-
-    // Сортировка и расчёт среднего
-    const sorted = [...summary].sort((a, b) => b.percent - a.percent);
-
-    const avg = sorted.length > 0
-      ? Math.round(sorted.reduce((a, b) => a + b.percent, 0) / sorted.length)
-      : 100;
-
-    const bestGroup = sorted[0] || null;
-    const worstGroup = sorted[sorted.length - 1] || null;
-
-    res.json({
-      period: type,
-      averagePercent: avg,
-      bestGroup,
-      worstGroup,
-      groups: sorted
-    });
-
-  } catch (err) {
-    console.error('Ошибка в /stats/summary:', err);
-    res.status(500).json({ error: 'Ошибка при расчёте аналитики' });
-  }
-});
-
+  });
 // === СТАТИСТИКА ПО ОДНОМУ СТУДЕНТУ (для страницы "Все студенты") ===
 app.get('/api/attendance/student/:id/percent', authenticate, async (req, res) => {
   try {

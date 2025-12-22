@@ -19,12 +19,13 @@ const STATUS_MAP = {
 
 const STATUS_COLORS = {
   'П': 'FF90EE90',
-  'О': 'FFFFCC00',
-  'Б': 'FFFF6666',
-  'У': 'FF92D050',
-  'IT': 'FF4472C4',
+  'О': 'FF6868',
+  'Б': 'FFFFCC00',
+  'У': '507CFF',
+  'IT': 'C300FF',
   'Д': 'FFADD8E6',
-  'ОП': 'FFFFA500'
+  'ОП': 'FFFFA500',
+  'Вых': 'FFDDDDDD'
 };
 
 function getDateRange(type, customStart, customEnd) {
@@ -84,7 +85,23 @@ async function exportAttendanceService(prisma, req, res) {
       }
     });
 
-    const academicDays = getAcademicDays(start.toJSDate(), end.toJSDate(), holidays);
+    const generateAllDaysInRange = (startDate, endDate) => {
+      const days = [];
+      let current = DateTime.fromJSDate(startDate)
+        .setZone(ATTENDANCE_TIMEZONE)
+        .startOf('day');
+      const endDt = DateTime.fromJSDate(endDate)
+        .setZone(ATTENDANCE_TIMEZONE)
+        .startOf('day');
+
+      while (current <= endDt) {
+        days.push(current.toISODate());
+        current = current.plus({ days: 1 });
+      }
+      return days;
+    };
+
+    const academicDays = generateAllDaysInRange(start.toJSDate(), end.toJSDate());
 
     const attendanceMap = new Map();
     attendance.forEach(r => {
@@ -133,18 +150,45 @@ async function exportAttendanceService(prisma, req, res) {
         const cell = row.getCell(dateStr);
         const record = attendanceMap.get(`${student.id}_${dateStr}`);
 
-        const status = record?.status || 'ABSENT';
-        const display = STATUS_MAP[status];
+        const dt = DateTime.fromISO(dateStr).setZone(ATTENDANCE_TIMEZONE);
+        const isWeekend = dt.weekday === 6 || dt.weekday === 7; // суббота или воскресенье
+        const isHoliday = holidays.some(h => {
+          const holidayDate = DateTime.fromJSDate(h.date).toISODate();
+          return holidayDate === dateStr;
+        });
+
+        let display;
+        let bgColor;
+
+        if (isWeekend || isHoliday) {
+          display = 'Вых'; // Можно сделать 'В' или 'Выходной' — как хочешь
+          bgColor = 'FFDDDDDD'; // серый фон для выходных
+        } else if (record) {
+          display = STATUS_MAP[record.status] || 'О';
+          bgColor = STATUS_COLORS[display] || STATUS_COLORS['О'];
+        } else {
+          display = 'О'; // обычный прогул
+          bgColor = STATUS_COLORS['О'];
+        }
 
         cell.value = display;
         cell.fill = {
           type: 'pattern',
           pattern: 'solid',
-          fgColor: { argb: STATUS_COLORS[display] }
+          fgColor: { argb: bgColor }
         };
 
-        if (status === 'LATE' && record?.lateMinutes != null) {
+        // Подсказка только для опозданий
+        if (record?.status === 'LATE' && record?.lateMinutes != null) {
           cell.note = `Опоздание: ${record.lateMinutes} мин`;
+        }
+
+        // Можно добавить подсказку и для праздника
+        if (isHoliday) {
+          const holiday = holidays.find(h => DateTime.fromJSDate(h.date).toISODate() === dateStr);
+          if (holiday?.name) {
+            cell.note = holiday.name;
+          }
         }
       });
 

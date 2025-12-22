@@ -9,58 +9,135 @@ const AnalyticsPage = () => {
   const [loading, setLoading] = useState(true);
   const [period, setPeriod] = useState('academic_year');
   const [exporting, setExporting] = useState(false);
+  const [customStart, setCustomStart] = useState('');
+  const [customEnd, setCustomEnd] = useState('');
+  const [showCustomDates, setShowCustomDates] = useState(false);
+  const [error, setError] = useState('');
 
   useEffect(() => {
-    fetchStats();
-  }, [period]);
+    const today = new Date().toISOString().slice(0, 10);
+    setCustomEnd(today);
+    // По умолчанию начало — неделя назад
+    const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    setCustomStart(weekAgo);
+  }, []);
 
   const fetchStats = async () => {
     try {
       setLoading(true);
-      const res = await fetch(`${API_URL}/attendance/stats/summary?type=${period}`, {
+      setError('');
+
+      const params = new URLSearchParams();
+      params.append('type', period);
+
+      if (period === 'custom') {
+        if (!customStart || !customEnd) {
+          setError('Выберите даты для кастомного периода');
+          setLoading(false);
+          return;
+        }
+        params.append('start', customStart);
+        params.append('end', customEnd);
+      }
+
+      const res = await fetch(`${API_URL}/attendance/stats/summary?${params.toString()}`, {
         headers: { ...authHeaders() }
       });
 
       if (!res.ok) {
-        console.error('Ошибка загрузки статистики');
-        return;
+        throw new Error(`Ошибка ${res.status}`);
       }
 
       const data = await res.json();
       setStats(data);
-    } catch (error) {
-      console.error('Ошибка загрузки аналитики:', error);
+    } catch (err) {
+      console.error('Ошибка загрузки аналитики:', err);
+      setError(err.message || 'Не удалось загрузить аналитику');
     } finally {
       setLoading(false);
     }
   };
 
+  useEffect(() => {
+    fetchStats();
+  }, []);
+
+  // Перезагружаем аналитику при смене периода
+  useEffect(() => {
+    fetchStats();
+  }, [period]);
+
+  // Обновляем аналитику при изменении кастомных дат
+  useEffect(() => {
+    if (period === 'custom' && customStart && customEnd) {
+      fetchStats();
+    }
+  }, [customStart, customEnd, period]); // ← зависимости: даты и период
+
   if (loading) return <div className="loading">Загрузка аналитики...</div>;
   if (!stats) return <div className="error">Данные недоступны</div>;
+  if (!stats.groups || !Array.isArray(stats.groups) || stats.groups.length === 0) {
+    return <div className="error">Нет данных для отображения</div>;
+  }
 
   const handleExport = async () => {
     try {
       setExporting(true);
-      const allowed = ['academic_year', 'month', 'week', 'today'];
-      const exportType = allowed.includes(period) ? period : 'academic_year';
-      const res = await fetch(`${API_URL}/export/attendance?dateRangeType=${exportType}`, {
+
+      const params = new URLSearchParams();
+
+      if (period === 'custom') {
+        if (!customStart || !customEnd) {
+          alert('Выберите даты начала и конца');
+          return;
+        }
+        params.append('startDate', customStart);
+        params.append('endDate', customEnd);
+        params.append('dateRangeType', 'custom'); // ←←← ВОТ ЭТА СТРОКА КЛЮЧЕВАЯ!
+      } else {
+        const mapping = {
+          today: 'today',
+          week: 'week',
+          month: 'month',
+          academic_year: 'academic_year',
+          semester1: 'semester1',
+          semester2: 'semester2'
+        };
+        params.append('dateRangeType', mapping[period] || 'academic_year');
+      }
+
+      const url = `${API_URL}/export/attendance?${params.toString()}`;
+
+      const res = await fetch(url, {
         headers: { ...authHeaders() }
       });
 
       if (!res.ok) {
-        throw new Error('export failed');
+        throw new Error('Ошибка сервера при экспорте');
       }
 
       const blob = await res.blob();
-      const url = window.URL.createObjectURL(blob);
+      const downloadUrl = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
-      link.href = url;
-      link.download = `attendance_${exportType}.xlsx`;
+      link.href = downloadUrl;
+
+      let filename = 'посещаемость';
+      if (period === 'custom') {
+        filename += `_${customStart}_по_${customEnd}`;
+      } else {
+        filename += `_${period}`;
+      }
+      filename += '.xlsx';
+
+      link.download = filename;
+      document.body.appendChild(link);
       link.click();
-      window.URL.revokeObjectURL(url);
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(downloadUrl);
+
     } catch (error) {
       console.error('Ошибка экспорта:', error);
-      alert('Не удалось выгрузить Excel. Попробуйте еще раз.');
+      alert('Не удалось экспортировать. Проверьте период и попробуйте снова.');
     } finally {
       setExporting(false);
     }
@@ -73,23 +150,79 @@ const AnalyticsPage = () => {
       <div className="analytics-modern">
         <div className="analytics-header">
           <h1>Аналитика посещаемости</h1>
+          <p className="period-subtitle">
+            Период:{' '}
+            <strong>
+              {period === 'custom'
+                ? (customStart && customEnd
+                  ? `${customStart.replace(/-/g, '.')} → ${customEnd.replace(/-/g, '.')}`
+                  : 'Выберите даты')
+                : {
+                  academic_year: 'Учебный год',
+                  semester1: '1 семестр',
+                  semester2: '2 семестр',
+                  month: 'Текущий месяц',
+                  week: 'Текущая неделя',
+                  today: 'Текущий день'
+                }[period] || 'Учебный год'
+              }
+            </strong>
+          </p>
           <div className="analytics-actions">
-            <select
-              value={period}
-              onChange={(e) => setPeriod(e.target.value)}
-              className="period-select"
-            >
-              <option value="academic_year">Учебный год</option>
-              <option value="semester1">1 семестр</option>
-              <option value="semester2">2 семестр</option>
-              <option value="month">Текущий месяц</option>
-              <option value="week">Текущая неделя</option>
-              <option value="today">Текущий день</option>
-            </select>
+            <div className="period-selector">
+              <select
+                value={period}
+                onChange={(e) => {
+                  const newPeriod = e.target.value;
+                  setPeriod(newPeriod);
+                  setShowCustomDates(newPeriod === 'custom');
+
+                  // ←←← ВАЖНО: очищаем даты, если перешли с кастомного на другой период
+                  if (newPeriod !== 'custom') {
+                    setCustomStart('');
+                    setCustomEnd('');
+                  } else {
+                    // При выборе кастомного — устанавливаем текущую неделю по умолчанию
+                    const today = new Date().toISOString().slice(0, 10);
+                    const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+                    setCustomStart(weekAgo);
+                    setCustomEnd(today);
+                  }
+                }}
+                className="period-select"
+              >
+                <option value="academic_year">Учебный год</option>
+                <option value="semester1">1 семестр</option>
+                <option value="semester2">2 семестр</option>
+                <option value="month">Текущий месяц</option>
+                <option value="week">Текущая неделя</option>
+                <option value="today">Текущий день</option>
+                <option value="custom">Кастомный период ←</option>
+              </select>
+
+              {showCustomDates && (
+                <div className="custom-dates">
+                  <input
+                    type="date"
+                    value={customStart}
+                    onChange={(e) => setCustomStart(e.target.value)}
+                    max={customEnd}
+                  />
+                  <span style={{ margin: '0 8px' }}>—</span>
+                  <input
+                    type="date"
+                    value={customEnd}
+                    onChange={(e) => setCustomEnd(e.target.value)}
+                    min={customStart}
+                  />
+                </div>
+              )}
+            </div>
+
             <button
               className="export-btn"
               onClick={handleExport}
-              disabled={exporting}
+              disabled={exporting || (showCustomDates && (!customStart || !customEnd))}
             >
               {exporting ? 'Готовим файл...' : 'Экспорт в Excel'}
             </button>

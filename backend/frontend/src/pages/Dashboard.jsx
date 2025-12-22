@@ -118,9 +118,10 @@ const TeacherDashboard = () => {
           groupsList.forEach((g) => {
             const s = g.stats;
             if (!s) {
-              g.attendancePercent = null;
+              g.attendancePercent = 0; // если нет stats — 0%
               return;
             }
+            const markedCount = s.marked || 0;
             const presentCount =
               (s.present || 0) +
               (s.valid || 0) +
@@ -128,9 +129,12 @@ const TeacherDashboard = () => {
               (s.dual || 0) +
               (s.late || 0);
             const totalCount = presentCount + (s.absent || 0);
-            g.attendancePercent = totalCount > 0
-              ? Math.round((presentCount / totalCount) * 100)
-              : 100;
+
+            g.attendancePercent = markedCount === 0
+              ? 0  // никто не отмечен — 0%
+              : totalCount > 0
+                ? Math.round((presentCount / totalCount) * 100)
+                : 100;
           });
         }
         const specsList = Array.from(

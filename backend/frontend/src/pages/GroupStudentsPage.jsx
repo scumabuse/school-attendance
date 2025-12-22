@@ -21,6 +21,9 @@ const GroupStudentsPage = () => {
   const [exportPeriod, setExportPeriod] = useState("week");
   const [exporting, setExporting] = useState(false);
   const [user, setUser] = useState(null);
+  const [customStart, setCustomStart] = useState('');
+  const [customEnd, setCustomEnd] = useState('');
+  const [showCustomDates, setShowCustomDates] = useState(false);
 
   const today = new Date().toISOString().slice(0, 10);
 
@@ -111,6 +114,13 @@ const GroupStudentsPage = () => {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    const today = new Date().toISOString().slice(0, 10);
+    setCustomEnd(today);
+    const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    setCustomStart(weekAgo);
+  }, []);
 
   useEffect(() => {
     setUser(getUser());
@@ -289,15 +299,35 @@ const GroupStudentsPage = () => {
     try {
       setExporting(true);
 
-      const res = await fetch(
-        `${API_URL}/export/attendance?groupIds=${id}&dateRangeType=${exportPeriod}`,
-        {
-          headers: { ...authHeaders() }
+      const params = new URLSearchParams();
+      params.append('groupIds', id); // экспорт только этой группы
+
+      if (exportPeriod === 'custom') {
+        if (!customStart || !customEnd) {
+          alert('Выберите даты начала и конца');
+          return;
         }
-      );
+        params.append('startDate', customStart);
+        params.append('endDate', customEnd);
+        params.append('dateRangeType', 'custom');
+      } else {
+        const mapping = {
+          today: 'today',
+          week: 'week',
+          month: 'month',
+          semester1: 'semester1',
+          semester2: 'semester2',
+          academic_year: 'academic_year'
+        };
+        params.append('dateRangeType', mapping[exportPeriod] || 'week');
+      }
+
+      const res = await fetch(`${API_URL}/export/attendance?${params.toString()}`, {
+        headers: { ...authHeaders() }
+      });
 
       if (!res.ok) {
-        throw new Error('export failed');
+        throw new Error('Ошибка экспорта');
       }
 
       const blob = await res.blob();
@@ -305,31 +335,28 @@ const GroupStudentsPage = () => {
       const link = document.createElement('a');
       link.href = url;
 
-      // Красивое имя файла
-      let periodName;
-      if (exportPeriod === 'today') {
-        const today = new Date().toLocaleDateString('ru-RU', {
-          day: '2-digit',
-          month: '2-digit',
-          year: 'numeric'
-        }).replaceAll('/', '.');
-        periodName = `сегодня_${today}`;
+      let filename = `посещаемость_${group?.name || 'группа'}`;
+      if (exportPeriod === 'custom') {
+        filename += `_${customStart.replace(/-/g, '.')}_по_${customEnd.replace(/-/g, '.')}`;
       } else {
-        periodName = {
+        const names = {
+          today: 'сегодня',
           week: 'неделя',
           month: 'месяц',
-          semester1: '1-й_семестр',
-          semester2: '2-й_семестр',
+          semester1: '1_семестр',
+          semester2: '2_семестр',
           academic_year: 'учебный_год'
-        }[exportPeriod] || exportPeriod;
+        };
+        filename += `_${names[exportPeriod] || exportPeriod}`;
       }
+      filename += '.xlsx';
 
-      link.download = `attendance_${group?.name || id}_${periodName}.xlsx`;
+      link.download = filename;
       link.click();
       window.URL.revokeObjectURL(url);
     } catch (error) {
-      console.error('Ошибка экспорта:', error);
-      alert('Не удалось выгрузить Excel. Попробуйте еще раз.');
+      console.error('Ошибка экспорта группы:', error);
+      alert('Не удалось экспортировать группу.');
     } finally {
       setExporting(false);
     }
@@ -352,22 +379,48 @@ const GroupStudentsPage = () => {
 
         {user?.role === 'HEAD' && (
           <div className="export-group-container">
-            <select
-              className="export-period-select"
-              value={exportPeriod}
-              onChange={(e) => setExportPeriod(e.target.value)}
-            >
-              <option value="today">Сегодня</option>
-              <option value="week">Неделя</option>
-              <option value="month">Месяц</option>
-              <option value="semester1">1 семестр</option>
-              <option value="semester2">2 семестр</option>
-              <option value="academic_year">Учебный год</option>
-            </select>
+            <div className="period-selector">
+              <select
+                className="export-period-select"
+                value={exportPeriod}
+                onChange={(e) => {
+                  setExportPeriod(e.target.value);
+                  setShowCustomDates(e.target.value === 'custom');
+                }}
+              >
+                <option value="today">Сегодня</option>
+                <option value="week">Неделя</option>
+                <option value="month">Месяц</option>
+                <option value="semester1">1 семестр</option>
+                <option value="semester2">2 семестр</option>
+                <option value="academic_year">Учебный год</option>
+                <option value="custom">Кастомный период ←</option>
+              </select>
+
+              {showCustomDates && (
+                <div className="custom-dates">
+                  <input
+                    type="date"
+                    value={customStart}
+                    onChange={(e) => setCustomStart(e.target.value)}
+                    max={customEnd || today}
+                  />
+                  <span style={{ margin: '0 8px' }}>—</span>
+                  <input
+                    type="date"
+                    value={customEnd}
+                    onChange={(e) => setCustomEnd(e.target.value)}
+                    min={customStart}
+                    max={today}
+                  />
+                </div>
+              )}
+            </div>
+
             <button
               className="export-group-btn"
               onClick={handleExportGroup}
-              disabled={exporting}
+              disabled={exporting || (showCustomDates && (!customStart || !customEnd))}
             >
               {exporting ? 'Экспорт...' : '📊 Экспорт в Excel'}
             </button>

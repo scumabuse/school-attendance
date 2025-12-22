@@ -16,9 +16,24 @@ const HeadStudentsPage = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedGroup, setSelectedGroup] = useState("Все");
   const [selectedCourse, setSelectedCourse] = useState("Все");
+  const [sortOrder, setSortOrder] = useState("none");
 
   const [page, setPage] = useState(1);
   const [user, setUser] = useState(null);
+
+  const getStatusText = (percent) => {
+    if (percent === null || percent === undefined) return "—";
+    if (percent >= 80) return "Хорошо";
+    if (percent >= 60) return "На грани";
+    return "Требуется вмешательство";
+  };
+
+  const getStatusClass = (percent) => {
+    if (percent === null || percent === undefined) return "";
+    if (percent >= 80) return "status-good";
+    if (percent >= 60) return "status-warning";
+    return "status-danger";
+  };
 
   useEffect(() => {
     setUser(getUser());
@@ -42,6 +57,9 @@ const HeadStudentsPage = () => {
         }
 
         const data = await res.json();
+        if (!Array.isArray(data)) {
+          throw new Error("Сервер вернул неверный формат данных");
+        }
         setStudents(data);
 
         // Загружаем проценты посещаемости КАЖДОГО студента за всё время (учебный год)
@@ -115,8 +133,20 @@ const HeadStudentsPage = () => {
       list = list.filter((s) => s.group?.course === courseNum);
     }
 
+    if (sortOrder !== "none") {
+      list = [...list].sort((a, b) => {
+        const aPercent = percents[a.id] ?? -1;
+        const bPercent = percents[b.id] ?? -1;
+        if (sortOrder === "asc") {
+          return aPercent - bPercent;
+        } else {
+          return bPercent - aPercent;
+        }
+      });
+    }
+
     return list;
-  }, [students, searchTerm, selectedGroup, selectedCourse]);
+  }, [students, searchTerm, selectedGroup, selectedCourse, sortOrder, percents]);
 
   // Пагинация
   const totalPages = Math.max(1, Math.ceil(filteredStudents.length / PAGE_SIZE));
@@ -129,7 +159,7 @@ const HeadStudentsPage = () => {
   // Сброс страницы при изменении фильтров/поиска
   useEffect(() => {
     setPage(1);
-  }, [searchTerm, selectedGroup, selectedCourse]);
+  }, [searchTerm, selectedGroup, selectedCourse, sortOrder]);
 
   if (!user || user.role !== "HEAD") {
     return <div className="loading">Доступ только для заведующей</div>;
@@ -184,6 +214,15 @@ const HeadStudentsPage = () => {
             </option>
           ))}
         </select>
+
+        <select
+          value={sortOrder}
+          onChange={(e) => setSortOrder(e.target.value)}
+        >
+          <option value="none">Нет сортировки</option>
+          <option value="asc">По возрастанию %</option>
+          <option value="desc">По убыванию %</option>
+        </select>
       </div>
 
       <div className="students-table">
@@ -194,6 +233,7 @@ const HeadStudentsPage = () => {
           <span>Курс</span>
           <span>Специальность</span>
           <span>% за всё время</span>
+          <span>Статус</span>
         </div>
         {paginatedStudents.length === 0 ? (
           <div className="no-data">Студенты не найдены</div>
@@ -210,6 +250,7 @@ const HeadStudentsPage = () => {
                   ? "—"
                   : `${percents[s.id]}%`}
               </span>
+              <span className={getStatusClass(percents[s.id])}>{getStatusText(percents[s.id])}</span>
             </div>
           ))
         )}
@@ -290,7 +331,7 @@ const HeadStudentsPage = () => {
         }
 
         .search-box input {
-          width: 100%;
+          width: 90%;
           padding: 10px 12px;
           padding-left: 34px;
           border-radius: 8px;
@@ -340,7 +381,7 @@ const HeadStudentsPage = () => {
         .students-header,
         .students-row {
           display: grid;
-          grid-template-columns: 60px 4fr 2fr 80px 3fr 80px;
+          grid-template-columns: 60px 4fr 2fr 80px 3fr 80px 120px;
           gap: 8px;
           padding: 10px 14px;
           align-items: center;
@@ -396,6 +437,21 @@ const HeadStudentsPage = () => {
           color: #777;
         }
 
+        .status-good {
+          color: green;
+          font-weight: bold;
+        }
+
+        .status-warning {
+          color: #ff9800;
+          font-weight: bold;
+        }
+
+        .status-danger {
+          color: red;
+          font-weight: bold;
+        }
+
         @media (max-width: 800px) {
           .filters {
             flex-direction: column;
@@ -408,11 +464,11 @@ const HeadStudentsPage = () => {
 
           .students-header,
           .students-row {
-            grid-template-columns: 40px 3fr 2fr 60px 0 70px;
+            grid-template-columns: 40px 3fr 2fr 60px 0 70px 0;
           }
 
-          .students-header span:last-child,
-          .students-row span:last-child {
+          .students-header span:nth-child(6),
+          .students-row span:nth-child(6) {
             display: inline-block;
           }
         }
