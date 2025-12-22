@@ -230,6 +230,7 @@ const AnalyticsPage = () => {
         </div>
 
         {/* Сводные карточки — НЕ МЕНЯЕМ */}
+        {/* Сводные карточки как у друга */}
         <div className="summary-grid">
           <div className="summary-item">
             <div className="summary-label">Средняя посещаемость</div>
@@ -237,19 +238,31 @@ const AnalyticsPage = () => {
               {stats.averagePercent}%
             </div>
           </div>
-          <div className="summary-item">
-            <div className="summary-label">Лучшая группа</div>
-            <div className="summary-value good">
-              {stats.bestGroup?.groupName || '—'}
+
+          <div className="summary-item leaders-item">
+            <div className="summary-label-lider">Лидеры</div>
+            <div className="leaders-list">
+              {stats.groups.slice(0, 3).map((group, index) => (
+                <div key={group.groupId} className="leader-item">
+                  <span className="leader-rank">#{index + 1}</span>
+                  <span className="leader-name">{group.groupName}</span>
+                  <span className="leader-percent good">{group.percent}%</span>
+                </div>
+              ))}
             </div>
-            <div className="summary-sub">{stats.bestGroup?.percent || 0}%</div>
           </div>
-          <div className="summary-item">
-            <div className="summary-label">Худшая группа</div>
-            <div className="summary-value bad">
-              {stats.worstGroup?.groupName || '—'}
+
+          <div className="summary-item outsiders-item">
+            <div className="summary-labe-loser">Аутсайдеры</div>
+            <div className="outsiders-list">
+              {stats.groups.slice(-3).reverse().map((group, index) => (
+                <div key={group.groupId} className="outsider-item">
+                  <span className="outsider-rank">#{stats.groups.length - index}</span>
+                  <span className="outsider-name">{group.groupName}</span>
+                  <span className="outsider-percent bad">{group.percent}%</span>
+                </div>
+              ))}
             </div>
-            <div className="summary-sub">{stats.worstGroup?.percent || 0}%</div>
           </div>
         </div>
 

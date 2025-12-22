@@ -8,6 +8,7 @@ import HeadTabs from "../components/HeadTabs";
 import ConfirmModal from "../components/ConfirmModal";
 import { useLocation } from "react-router-dom";
 import { useRef } from "react";
+import QrButton from "../components/QR/QRbutton";
 
 const TeacherDashboard = () => {
   const [groups, setGroups] = useState([]);
@@ -400,6 +401,11 @@ const TeacherDashboard = () => {
           )}
         </div>
       </div>
+      
+      {/* Плавающая кнопка QR для преподавателя/заведующей */}
+      {teacher && (teacher.role === 'HEAD' || teacher.role === 'TEACHER') && (
+        <QrButton user={teacher} />
+      )}
     </div>
   );
 

@@ -113,6 +113,61 @@
   font-weight: 500;
 }
 
+.leaders-list, .outsiders-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.leader-item, .outsider-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.leader-item:last-child, .outsider-item:last-child {
+  border-bottom: none;
+}
+
+.leader-rank, .outsider-rank {
+  font-size: 14px;
+  font-weight: 600;
+  color: #64748b;
+  min-width: 32px;
+}
+
+.leader-name, .outsider-name {
+  flex: 1;
+  font-size: 15px;
+  font-weight: 500;
+  color: #334155;
+}
+
+.leader-percent, .outsider-percent {
+  font-size: 16px;
+  font-weight: 600;
+  min-width: 50px;
+  text-align: right;
+}
+
+.leader-percent.good {
+  color: #10b981;
+}
+
+.outsider-percent.bad {
+  color: #ef4444;
+}
+
+.no-data {
+  color: #94a3b8;
+  font-size: 14px;
+  text-align: center;
+  padding: 12px 0;
+}
+
 /* Бар-чарт */
 .chart-section h2, .table-section h2 {
   font-size: 20px;

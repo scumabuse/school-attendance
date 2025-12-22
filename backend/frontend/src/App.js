@@ -5,6 +5,7 @@ import Dashboard from "./pages/Dashboard";
 import HeadStudentsPage from "./pages/HeadStudentsPage";
 import AnalyticsPage from "./pages/AnalyticsPage";
 import ProtectedRoute from "./utils/ProtectedRoute";
+import StudentDashboard from "./pages/StudentDashboard";
 
 function App() {
   return (
@@ -44,8 +45,16 @@ function App() {
             </ProtectedRoute>
           }
         />
+        <Route
+        path="/student"
+        element={
+          <ProtectedRoute>
+            <StudentDashboard />
+          </ProtectedRoute>
+        }
+        />
       </Routes>
-    </BrowserRouter>
+    </BrowserRouter >
   );
 }
 

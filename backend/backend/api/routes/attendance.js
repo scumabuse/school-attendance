@@ -574,6 +574,72 @@ router.post('/batch', async (req, res) => {
   }
 });
 
+// 1. Получение нового QR (для преподавателя)
+router.get('/qr/refresh/:teacherId', async (req, res) => {
+  try {
+    const { teacherId } = req.params;
+    const qrData = await qrService.generateToken(teacherId);
+    res.json({ token: qrData.token });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// 2. Верификация скана (для студента)
+router.post('/qr/verify', async (req, res) => {
+  try {
+    const { token } = req.body;
+    const currentUserId = req.user?.id;
+    if (!currentUserId) return res.status(401).json({ error: "Нет авторизации" });
+
+    const check = await qrService.validateToken(token);
+    if (!check.valid) return res.status(400).json({ error: check.message });
+
+    // Ищем запись студента. В идеале userId == studentId, но если нет,
+    // пытаемся сопоставить по ФИО.
+    let student = await prisma.student.findUnique({
+      where: { id: currentUserId },
+      select: { id: true, groupId: true }
+    });
+
+    if (!student && req.user?.fullName) {
+      student = await prisma.student.findFirst({
+        where: { fullName: req.user.fullName },
+        select: { id: true, groupId: true }
+      });
+    }
+
+    if (!student) {
+      return res.status(400).json({ error: "Студент не найден для этого аккаунта" });
+    }
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0); // Обнуляем время для соответствия @db.Date
+
+    // Создаем запись или обновляем до PRESENT в карточке группы
+    await prisma.attendance.upsert({
+      where: {
+        studentId_date: { studentId: student.id, date: today }
+      },
+      update: {
+        status: 'PRESENT',
+        markedAt: new Date()
+      },
+      create: {
+        studentId: student.id,
+        groupId: student.groupId,
+        date: today,
+        status: 'PRESENT',
+        markedAt: new Date()
+      }
+    });
+
+    res.json({ success: true, message: "Вы успешно отмечены!" });
+  } catch (e) {
+    res.status(500).json({ error: "Ошибка сервера: " + e.message });
+  }
+});
+
 module.exports = router;
 
 
