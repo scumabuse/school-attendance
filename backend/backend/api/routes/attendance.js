@@ -4,9 +4,14 @@
 const express = require('express');
 const { PrismaClient } = require('@prisma/client');
 const { DateTime } = require('luxon');
-
+const ATTENDANCE_TIMEZONE = 'Asia/Almaty';
 const router = express.Router();
 const prisma = new PrismaClient();
+
+function normalizeAttendanceDate(isoDate) {
+  const [year, month, day] = isoDate.split('-').map(Number);
+  return new Date(Date.UTC(year, month - 1, day));
+}
 
 /**
  * Проверяет, является ли дата выходным (суббота или воскресенье)
@@ -21,7 +26,7 @@ function isWeekend(date) {
  */
 async function isHoliday(date) {
   const holiday = await prisma.holiday.findUnique({
-    where: { date: DateTime.fromJSDate(date).startOf('day').toJSDate() }
+    where: { date }
   });
   return !!holiday;
 }
@@ -89,56 +94,62 @@ router.get('/log', async (req, res) => {
     if (studentId) where.studentId = studentId;
 
     if (date) {
-      // Конкретная дата - используем ту же логику, что и в batch
-      // Для типа DATE в PostgreSQL используем диапазон от начала дня до начала следующего дня
-      const dt = DateTime.fromISO(date).setZone('Asia/Almaty');
-      const startOfDay = DateTime.fromISO(date).startOf('day').toJSDate();
-      const nextDay = DateTime.fromISO(date).plus({ days: 1 }).startOf('day').toJSDate();
+      const startOfDay = normalizeAttendanceDate(date); // Например: 2025-12-22T00:00:00.000Z
+
+      const endOfDay = new Date(startOfDay);
+      endOfDay.setUTCDate(endOfDay.getUTCDate() + 1); // 2025-12-23T00:00:00.000Z
+
       where.date = {
         gte: startOfDay,
-        lt: nextDay
+        lt: endOfDay
       };
-      console.log('Запрос логов для даты:', date, 'Диапазон:', startOfDay, 'до', nextDay);
-    } else if (startDate || endDate) {
-      // Период
-      where.date = {};
-      if (startDate) {
-        where.date.gte = new Date(startDate);
-      }
-      if (endDate) {
-        const end = new Date(endDate);
-        end.setHours(23, 59, 59, 999);
-        where.date.lte = end;
-      }
+
+      console.log('LOG DATE RANGE:', startOfDay.toISOString(), 'to', endOfDay.toISOString());
+      console.log('Запрос логов для даты:', date, 'Диапазон:', startOfDay, 'до', endOfDay);
+    
+  } else if (startDate || endDate) {
+    // Период
+    where.date = {};
+    if (startDate) {
+      where.date.gte = new Date(startDate);
     }
-
-    const logs = await prisma.attendance.findMany({
-      where,
-      include: {
-        student: { select: { fullName: true } },
-        group: { select: { name: true } },
-        updatedBy: { select: { fullName: true } }
-      },
-      orderBy: { date: 'desc' }
-    });
-
-    console.log('Найдено логов:', logs.length, 'для запроса:', JSON.stringify(where));
-
-    res.json(logs.map(l => ({
-      id: l.id,
-      studentId: l.studentId,
-      groupId: l.groupId,
-      fullName: l.student.fullName,
-      groupName: l.group.name,
-      status: l.status,
-      date: l.date,
-      updatedAt: l.updatedAt,
-      updatedBy: l.updatedBy?.fullName || 'Система'
-    })));
-  } catch (err) {
-    console.error('Ошибка получения лога посещаемости:', err);
-    res.status(500).json({ error: 'Ошибка сервера' });
+    if (endDate) {
+      const end = new Date(endDate);
+      end.setHours(23, 59, 59, 999);
+      where.date.lte = end;
+    }
   }
+
+  const logs = await prisma.attendance.findMany({
+    where,
+    include: {
+      student: { select: { fullName: true } },
+      group: { select: { name: true } },
+      updatedBy: { select: { fullName: true } }
+    },
+    orderBy: { date: 'desc' }
+  });
+
+  console.log('Найдено логов:', logs.length, 'для запроса:', JSON.stringify(where));
+
+  console.log('LOGS TO SEND:', logs);
+
+  res.json(logs.map(l => ({
+    id: l.id,
+    studentId: l.studentId,
+    groupId: l.groupId,
+    fullName: l.student.fullName,
+    groupName: l.group.name,
+    status: l.status,
+    date: l.date,
+    updatedAt: l.updatedAt,
+    updatedBy: l.updatedBy?.fullName || 'Система'
+  })));
+
+} catch (err) {
+  console.error('Ошибка получения лога посещаемости:', err);
+  res.status(500).json({ error: 'Ошибка сервера' });
+}
 });
 /**
  * GET /api/attendance
@@ -161,23 +172,14 @@ router.get('/', async (req, res) => {
     if (studentId) where.studentId = studentId;
 
     if (date) {
-      // Конкретная дата - используем ту же логику, что и в batch
-      // Для типа DATE в PostgreSQL используем диапазон от начала дня до начала следующего дня
-      const startOfDay = DateTime.fromISO(date).startOf('day').toJSDate();
-      const nextDay = DateTime.fromISO(date).plus({ days: 1 }).startOf('day').toJSDate();
-      where.date = {
-        gte: startOfDay,
-        lt: nextDay
-      };
+      where.date = normalizeAttendanceDate(date);
     } else if (startDate || endDate) {
       where.date = {};
       if (startDate) {
-        where.date.gte = new Date(startDate);
+        where.date.gte = normalizeAttendanceDate(startDate);
       }
       if (endDate) {
-        const end = new Date(endDate);
-        end.setHours(23, 59, 59, 999);
-        where.date.lte = end;
+        where.date.lte = normalizeAttendanceDate(endDate);
       }
     }
 
@@ -215,9 +217,11 @@ router.get('/:id', async (req, res) => {
       }
     });
 
-    if (!attendance) {
-      return res.status(404).json({ error: 'Запись посещаемости не найдена' });
+    if (attendance.length === 0) {
+      console.log('Ни одной записи посещаемости для этой даты');
+      // Дальше можно либо вернуть нули, либо строить массив студентов с 0
     }
+
 
     res.json(attendance);
   } catch (err) {
@@ -257,10 +261,8 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ error: 'Студент не принадлежит указанной группе' });
     }
 
-    const cleanDate = DateTime.fromISO(date)
-      .setZone('Asia/Almaty', { keepLocalTime: true })
-      .startOf('day')
-      .toJSDate();
+    const cleanDate = normalizeAttendanceDate(date);
+
 
     // Валидация: запрет отметок в выходные и праздники
     if (isWeekend(cleanDate)) {
@@ -339,8 +341,9 @@ router.put('/:id', async (req, res) => {
 
     const finalGroupId = groupId || current.groupId;
     const finalDate = date
-      ? DateTime.fromISO(date).startOf('day').toJSDate()
+      ? normalizeAttendanceDate(date)
       : current.date;
+
 
     // Валидация: запрет отметок в выходные и праздники
     if (isWeekend(finalDate)) {
@@ -497,10 +500,8 @@ router.post('/batch', async (req, res) => {
           continue;
         }
 
-        const cleanDate = DateTime.fromISO(date)
-          .setZone('Asia/Almaty', { keepLocalTime: true })
-          .startOf('day')
-          .toJSDate();
+        const cleanDate = normalizeAttendanceDate(date);
+
 
         // Валидация: запрет отметок в выходные и праздники
         if (isWeekend(cleanDate)) {

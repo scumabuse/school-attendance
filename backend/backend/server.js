@@ -61,40 +61,57 @@ const getCurrentCourse = (admissionYear) => {
 
 // Нормализация даты к "дню посещаемости" в нужной таймзоне
 function normalizeAttendanceDate(isoDate) {
-  return DateTime.fromISO(isoDate)
-    .setZone(ATTENDANCE_TIMEZONE, { keepLocalTime: true })
-    .startOf('day')
-    .toJSDate();
+  const [year, month, day] = isoDate.split('-').map(Number);
+
+  return new Date(Date.UTC(year, month - 1, day));
 }
+
+
 
 function getDateRange(type = 'academic_year', start, end) {
   const now = DateTime.now().setZone(ATTENDANCE_TIMEZONE);
   const year = now.month >= 9 ? now.year : now.year - 1;
   const next = year + 1;
 
+  // Обработка кастомного периода
+  if (type === 'custom' && start && end) {
+    const startDt = DateTime.fromISO(start).setZone(ATTENDANCE_TIMEZONE, { keepLocalTime: true });
+    const endDt = DateTime.fromISO(end).setZone(ATTENDANCE_TIMEZONE, { keepLocalTime: true }).endOf('day');
+    return {
+      start: startDt.toJSDate(),
+      end: endDt.toJSDate()
+    };
+  }
+
   const ranges = {
-    today: { start: now.startOf('day'), end: now.endOf('day') },
-    week: { start: now.minus({ days: 6 }).startOf('day'), end: now.endOf('day') },
-    month: { start: now.startOf('month'), end: now.endOf('month') },
+    today: {
+      start: now.startOf('day'),
+      end: now.endOf('day')
+    },
+    week: {
+      start: now.minus({ days: 6 }).startOf('day'),
+      end: now.endOf('day')
+    },
+    month: {
+      start: now.startOf('month'),
+      end: now.endOf('month')
+    },
     semester1: {
-      start: DateTime.fromObject({ year, month: 9, day: 1, zone: ATTENDANCE_TIMEZONE }),
-      end: DateTime.fromObject({ year: next, month: 1, day: 31, zone: ATTENDANCE_TIMEZONE })
+      start: DateTime.fromObject({ year, month: 9, day: 1 }).setZone(ATTENDANCE_TIMEZONE),
+      end: DateTime.fromObject({ year: next, month: 1, day: 31 }).setZone(ATTENDANCE_TIMEZONE).endOf('day')
     },
     semester2: {
-      start: DateTime.fromObject({ year: next, month: 2, day: 1, zone: ATTENDANCE_TIMEZONE }),
-      end: DateTime.fromObject({ year: next, month: 7, day: 31, zone: ATTENDANCE_TIMEZONE })
+      start: DateTime.fromObject({ year: next, month: 2, day: 1 }).setZone(ATTENDANCE_TIMEZONE),
+      end: DateTime.fromObject({ year: next, month: 7, day: 31 }).setZone(ATTENDANCE_TIMEZONE).endOf('day')
     },
     academic_year: {
-      start: DateTime.fromObject({ year, month: 9, day: 1, zone: ATTENDANCE_TIMEZONE }),
-      end: DateTime.fromObject({ year: next, month: 7, day: 31, zone: ATTENDANCE_TIMEZONE })
-    },
-    custom: {
-      start: DateTime.fromISO(start).setZone(ATTENDANCE_TIMEZONE),
-      end: DateTime.fromISO(end).setZone(ATTENDANCE_TIMEZONE)
-    },
+      start: DateTime.fromObject({ year, month: 9, day: 1 }).setZone(ATTENDANCE_TIMEZONE),
+      end: DateTime.fromObject({ year: next, month: 7, day: 31 }).setZone(ATTENDANCE_TIMEZONE).endOf('day')
+    }
   };
 
   const range = ranges[type] || ranges.academic_year;
+
   return {
     start: range.start.toJSDate(),
     end: range.end.toJSDate()
@@ -104,10 +121,12 @@ function getDateRange(type = 'academic_year', start, end) {
 // Сервисы
 const { importStudentsFromBuffer } = require('./services/importStudents');
 const { exportAttendanceService } = require('./services/exportAttendance');
+const attendanceRouter = require('./api/routes/attendance');
 
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
+app.use('/api/attendance', attendanceRouter);
 
 // Логи
 morgan.token('body', (req) => Object.keys(req.body).length ? ` Body: ${JSON.stringify(req.body).slice(0, 300)}` : '');
@@ -617,52 +636,15 @@ app.get('/api/attendance', authenticate, async (req, res) => {
   }
 });
 
-app.get('/api/attendance/log', authenticate, async (req, res) => {
-  const { groupId, date } = req.query;
-  const where = {};
-  if (groupId) where.groupId = groupId;
-  
-  // Используем ту же логику обработки даты, что и в batch роуте
-  if (date) {
-    const startOfDay = normalizeAttendanceDate(date);
-    const nextDay = DateTime.fromISO(date)
-      .setZone(ATTENDANCE_TIMEZONE, { keepLocalTime: true })
-      .plus({ days: 1 })
-      .startOf('day')
-      .toJSDate();
-    where.date = {
-      gte: startOfDay,
-      lt: nextDay
-    };
-  }
-
-  const logs = await prisma.attendance.findMany({
-    where,
-    include: {
-      student: { select: { fullName: true } },
-      group: { select: { name: true } },
-      updatedBy: { select: { fullName: true } }
-    },
-    orderBy: { date: 'desc' }
-  });
-
-  res.json(logs.map(l => ({
-    id: l.id,
-    studentId: l.studentId,
-    groupId: l.groupId,
-    fullName: l.student.fullName,
-    groupName: l.group.name,
-    status: l.status,
-    date: l.date,
-    updatedAt: l.updatedAt,
-    updatedBy: l.updatedBy?.fullName || 'Система'
-})));
-
-});
-
 app.post('/api/attendance', authenticate, async (req, res) => {
   const { studentId, groupId, date, status } = req.body;
   const cleanDate = normalizeAttendanceDate(date);
+  console.log('--- ATTENDANCE DATE DEBUG ---');
+  console.log('RAW FROM FRONT:', date);
+  console.log('CLEAN (ISO):', cleanDate.toISOString());
+  console.log('CLEAN (LOCAL):', cleanDate.toString());
+  console.log('------------------------------');
+
 
   const attendance = await prisma.attendance.upsert({
     where: { studentId_date: { studentId, date: cleanDate } },
@@ -687,8 +669,14 @@ app.post('/api/attendance/batch', authenticate, async (req, res) => {
 
   for (const record of records) {
     try {
-    const { studentId, groupId, date, status } = record;
+      const { studentId, groupId, date, status } = record;
       const cleanDate = normalizeAttendanceDate(date);
+      console.log('--- ATTENDANCE DATE DEBUG ---');
+      console.log('RAW FROM FRONT:', date);
+      console.log('CLEAN (ISO):', cleanDate.toISOString());
+      console.log('CLEAN (LOCAL):', cleanDate.toString());
+      console.log('------------------------------');
+
 
       const existing = await prisma.attendance.findUnique({
         where: { studentId_date: { studentId, date: cleanDate } }
@@ -770,107 +758,139 @@ app.post('/api/admin/finish-year', authenticate, isHeadOrAdmin, async (req, res)
 });
 
 // === СТАТИСТИКА СТУДЕНТА ===
-app.get('/api/attendance/student/:id/percent', authenticate, async (req, res) => {
-  const { id } = req.params;
-  const { type = 'academic_year', start, end } = req.query;
-
-  const range = getDateRange(type, start, end);
-  const holidays = await prisma.holiday.findMany({
-    where: { date: { gte: range.start, lte: range.end } }
-  });
-
-  const records = await prisma.attendance.findMany({
-    where: {
-      studentId: id,
-      date: { gte: range.start, lte: range.end }
-    }
-  });
-
-  const stats = await calculateAttendance(records, holidays, range.start, range.end);
-  const student = await prisma.student.findUnique({
-    where: { id },
-    select: { fullName: true, group: { select: { name: true } } }
-  });
-
-  res.json({
-    studentId: id,
-    fullName: student.fullName,
-    group: student.group.name,
-    ...stats,
-    period: type === 'custom' ? `${start} → ${end}` : type
-  });
-});
-
-// === СТАТИСТИКА ГРУППЫ ===
-app.get('/api/attendance/group/:id/percent', authenticate, async (req, res) => {
-  const { id } = req.params;
-  const { type = 'academic_year', start, end } = req.query;
-
-  const range = getDateRange(type, start, end);
-  const holidays = await prisma.holiday.findMany({
-    where: { date: { gte: range.start, lte: range.end } }
-  });
-
-  const records = await prisma.attendance.findMany({
-    where: {
-      groupId: id,
-      date: { gte: range.start, lte: range.end }
-    }
-  });
-
-  const stats = await calculateAttendance(records, holidays, range.start, range.end);
-  const group = await prisma.group.findUnique({ where: { id }, select: { name: true } });
-
-  res.json({
-    groupId: id,
-    groupName: group.name,
-    ...stats,
-    period: type === 'custom' ? `${start} → ${end}` : type
-  });
-});
-
-// === ОБЩАЯ СТАТИСТИКА (ЗАВУЧ) ===
 app.get('/api/attendance/stats/summary', authenticate, isHeadOrAdmin, async (req, res) => {
-  const { type = 'academic_year', start, end } = req.query;
-  const range = getDateRange(type, start, end);
+  try {
+    const { type = 'academic_year', start, end } = req.query;
+    const range = getDateRange(type, start, end);
 
-  const holidays = await prisma.holiday.findMany({
-    where: { date: { gte: range.start, lte: range.end } }
-  });
-
-  const groups = await prisma.group.findMany({
-    include: { students: { include: { attendances: true } } }
-  });
-
-  const summary = [];
-
-  for (const group of groups) {
-    const records = group.students.flatMap(s => s.attendances.filter(a =>
-      a.date >= range.start && a.date <= range.end
-    ));
-    const stats = await calculateAttendance(records, holidays, range.start, range.end);
-    summary.push({
-      groupId: group.id,
-      groupName: group.name,
-      percent: stats.percent,
-      studentsCount: group.students.length
+    // Получаем праздники за период (только даты)
+    const holidays = await prisma.holiday.findMany({
+      where: {
+        date: { gte: range.start, lte: range.end }
+      },
+      select: { date: true }
     });
+    const holidayDates = holidays.map(h => h.date);
+
+    // Получаем группы с количеством студентов (без загрузки студентов и attendances!)
+    const groups = await prisma.group.findMany({
+      select: {
+        id: true,
+        name: true,
+        _count: {
+          select: { students: true }
+        }
+      }
+    });
+
+    const summary = [];
+
+    for (const group of groups) {
+      // Запрашиваем ТОЛЬКО записи посещаемости за нужный период и только нужные поля
+      const attendanceRecords = await prisma.attendance.findMany({
+        where: {
+          groupId: group.id,
+          date: { gte: range.start, lte: range.end }
+        },
+        select: {
+          date: true,
+          status: true
+        }
+      });
+
+      // Передаём в калькулятор
+      const stats = await calculateAttendance(
+        attendanceRecords,
+        holidayDates,
+        range.start,
+        range.end
+      );
+
+      summary.push({
+        groupId: group.id,
+        groupName: group.name,
+        percent: Math.round(stats.percent || 0),
+        studentsCount: group._count.students
+      });
+    }
+
+    // Сортировка и расчёт среднего
+    const sorted = [...summary].sort((a, b) => b.percent - a.percent);
+
+    const avg = sorted.length > 0
+      ? Math.round(sorted.reduce((a, b) => a + b.percent, 0) / sorted.length)
+      : 100;
+
+    const bestGroup = sorted[0] || null;
+    const worstGroup = sorted[sorted.length - 1] || null;
+
+    res.json({
+      period: type,
+      averagePercent: avg,
+      bestGroup,
+      worstGroup,
+      groups: sorted
+    });
+
+  } catch (err) {
+    console.error('Ошибка в /stats/summary:', err);
+    res.status(500).json({ error: 'Ошибка при расчёте аналитики' });
   }
-
-  const avg = summary.length > 0
-    ? Math.round(summary.reduce((a, b) => a + b.percent, 0) / summary.length)
-    : 100;
-
-  res.json({
-    period: type,
-    averagePercent: avg,
-    bestGroup: summary.length > 0 ? summary.reduce((a, b) => a.percent > b.percent ? a : b) : null,
-    worstGroup: summary.length > 0 ? summary.reduce((a, b) => a.percent < b.percent ? a : b) : null,
-    groups: summary.sort((a, b) => b.percent - a.percent)
-  });
 });
 
+// === СТАТИСТИКА ПО ОДНОМУ СТУДЕНТУ (для страницы "Все студенты") ===
+app.get('/api/attendance/student/:id/percent', authenticate, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { type = 'academic_year', start, end } = req.query;
 
+    const range = getDateRange(type, start, end);
+
+    // Праздники за период
+    const holidays = await prisma.holiday.findMany({
+      where: {
+        date: { gte: range.start, lte: range.end }
+      },
+      select: { date: true }
+    });
+    const holidayDates = holidays.map(h => h.date);
+
+    // Записи посещаемости только этого студента за период
+    const records = await prisma.attendance.findMany({
+      where: {
+        studentId: id,
+        date: { gte: range.start, lte: range.end }
+      },
+      select: {
+        date: true,
+        status: true
+      }
+    });
+
+    const stats = await calculateAttendance(records, holidayDates, range.start, range.end);
+
+    // Инфо о студенте для красоты (можно не использовать, но полезно)
+    const student = await prisma.student.findUnique({
+      where: { id },
+      select: { fullName: true, group: { select: { name: true } } }
+    });
+
+    if (!student) {
+      return res.status(404).json({ error: 'Студент не найден' });
+    }
+
+    res.json({
+      studentId: id,
+      fullName: student.fullName,
+      group: student.group.name,
+      percent: Math.round(stats.percent || 0),
+      period: type === 'custom' ? `${start} → ${end}` : type
+    });
+  } catch (err) {
+    console.error('Ошибка статистики одного студента:', err);
+    res.status(500).json({ error: 'Ошибка сервера при расчёте процента' });
+  }
+});
 
 // ===================================
 // ТЕСТ
