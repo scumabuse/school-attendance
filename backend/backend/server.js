@@ -126,7 +126,8 @@ const attendanceRouter = require('./api/routes/attendance');
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
-app.use('/api/attendance', attendanceRouter);
+// Все маршруты посещаемости требуют авторизации
+app.use('/api/attendance', authenticate, attendanceRouter);
 
 // Логи
 morgan.token('body', (req) => Object.keys(req.body).length ? ` Body: ${JSON.stringify(req.body).slice(0, 300)}` : '');
@@ -591,7 +592,8 @@ app.get('/api/attendance', authenticate, async (req, res) => {
     const where = {};
 
     if (groupId) where.groupId = groupId;
-    if (studentId) where.studentId = studentId;
+    if (studentId && studentId !== 'current') where.studentId = studentId;
+    if (studentId === 'current') where.studentId = req.user.id;
 
     if (date) {
       // Конкретная дата — нормализуем её в учебную таймзону

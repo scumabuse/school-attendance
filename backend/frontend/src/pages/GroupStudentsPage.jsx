@@ -132,69 +132,29 @@ const GroupStudentsPage = () => {
     }
 
     const currentStatus = statuses[studentId] || "none";
+    
+    // Для всех статусов, включая LATE: обычное переключение (без таймера)
+    const newStatus = currentStatus === status ? "none" : status;
 
-    if (status === "LATE") {
-      if (currentStatus === "LATE") {
-        // Если уже LATE, останавливаем таймер (второй клик)
-        if (lateTimers[studentId]) {
-          clearInterval(lateTimers[studentId]);
-          setLateTimers((prev) => {
-            const copy = { ...prev };
-            delete copy[studentId];
-            return copy;
-          });
-        }
-        // Не меняем статус, оставляем LATE с зафиксированным временем
-      } else {
-        // Первый клик: устанавливаем LATE и запускаем таймер
-        setStatuses((prev) => ({
-          ...prev,
-          [studentId]: "LATE",
-        }));
-
-        // Сразу выставляем 0 секунд
-        setLateMinutes((prev) => ({
-          ...prev,
-          [studentId]: 0,
-        }));
-
-        const timerId = setInterval(() => {
-          setLateMinutes((prev) => ({
-            ...prev,
-            // увеличиваем счётчик в секундах
-            [studentId]: (prev[studentId] || 0) + 1,
-          }));
-        }, 1000); // шаг таймера — 1 секунда
-
-        setLateTimers((prev) => ({
-          ...prev,
-          [studentId]: timerId,
-        }));
-      }
-    } else {
-      // Для других статусов: обычное переключение
-      const newStatus = currentStatus === status ? "none" : status;
-
-      // Если до этого был статус LATE — останавливаем таймер и сбрасываем минуты
-      if (currentStatus === "LATE" && lateTimers[studentId]) {
-        clearInterval(lateTimers[studentId]);
-        setLateTimers((prev) => {
-          const copy = { ...prev };
-          delete copy[studentId];
-          return copy;
-        });
-        setLateMinutes((prev) => {
-          const copy = { ...prev };
-          delete copy[studentId];
-          return copy;
-        });
-      }
-
-      setStatuses((prev) => ({
-        ...prev,
-        [studentId]: newStatus,
-      }));
+    // Если до этого был статус LATE — останавливаем таймер и сбрасываем минуты
+    if (currentStatus === "LATE" && lateTimers[studentId]) {
+      clearInterval(lateTimers[studentId]);
+      setLateTimers((prev) => {
+        const copy = { ...prev };
+        delete copy[studentId];
+        return copy;
+      });
+      setLateMinutes((prev) => {
+        const copy = { ...prev };
+        delete copy[studentId];
+        return copy;
+      });
     }
+
+    setStatuses((prev) => ({
+      ...prev,
+      [studentId]: newStatus,
+    }));
   };
 
   const counts = students.reduce(
@@ -233,12 +193,7 @@ const GroupStudentsPage = () => {
           status,
         };
 
-        // Для LATE добавляем lateMinutes (в минутах) и markedAt
-        if (status === "LATE") {
-          const totalSeconds = lateMinutes[sid] || 0;
-          record.lateMinutes = Math.floor(totalSeconds / 60); // Переводим секунды в минуты
-          record.markedAt = new Date().toISOString();
-        }
+        // LATE больше не использует таймер, поэтому lateMinutes не нужен
 
         return record;
       });
@@ -395,22 +350,17 @@ const GroupStudentsPage = () => {
                     Присутствует
                   </button>
                   <button
-                    className={`status-btn absent ${currentStatus === "ABSENT" ? "active" : ""}`}
-                    onClick={() => toggleStatus(student.id, "ABSENT")}
-                  >
-                    Отсутствует
-                  </button>
-                  <button
                     className={`status-btn sick ${currentStatus === "SICK" ? "active" : ""}`}
                     onClick={() => toggleStatus(student.id, "SICK")}
                   >
                     Больничный
                   </button>
                   <button
-                    className={`status-btn valid ${currentStatus === "VALID_ABSENT" ? "active" : ""}`}
-                    onClick={() => toggleStatus(student.id, "VALID_ABSENT")}
+                    className={`status-btn dual ${currentStatus === "DUAL" ? "active" : ""}`}
+                    onClick={() => toggleStatus(student.id, "DUAL")}
+                    disabled={isWeekendOrHoliday}
                   >
-                    Уважительная
+                    Дуальное обучение
                   </button>
                   <button
                     className={`status-btn wsk ${currentStatus === "ITHUB" ? "active" : ""}`}
@@ -419,26 +369,22 @@ const GroupStudentsPage = () => {
                     IT HUB
                   </button>
                   <button
-                    className={`status-btn dual ${currentStatus === "DUAL" ? "active" : ""}`}
-                    onClick={() => toggleStatus(student.id, "DUAL")}
-                    disabled={isWeekendOrHoliday}
+                    className={`status-btn valid ${currentStatus === "VALID_ABSENT" ? "active" : ""}`}
+                    onClick={() => toggleStatus(student.id, "VALID_ABSENT")}
                   >
-                    Д
+                    По приказу
                   </button>
                   <button
                     className={`status-btn late ${currentStatus === "LATE" ? "active" : ""}`}
                     onClick={() => toggleStatus(student.id, "LATE")}
-                    disabled={isWeekendOrHoliday}
                   >
-                    {currentStatus === "LATE" && lateMinutes[student.id] !== undefined
-                      ? (() => {
-                        const totalSeconds = lateMinutes[student.id] || 0;
-                        const mins = Math.floor(totalSeconds / 60);
-                        const secs = totalSeconds % 60;
-                        const secsStr = secs.toString().padStart(2, "0");
-                        return `ОП (${mins}:${secsStr})`;
-                      })()
-                      : "ОП"}
+                    По заявлению
+                  </button>
+                  <button
+                    className={`status-btn absent ${currentStatus === "ABSENT" ? "active" : ""}`}
+                    onClick={() => toggleStatus(student.id, "ABSENT")}
+                  >
+                    Без причины
                   </button>
                 </div>
               </div>
@@ -450,12 +396,12 @@ const GroupStudentsPage = () => {
         <div className="bottom-bar">
           <div className="stats-summary">
             <span className="stat-item present">Присутствует {counts.present}</span>
-            <span className="stat-item absent">Отсутствует {counts.absent}</span>
-            <span className="stat-item valid">Уважительная {counts.valid}</span>
             <span className="stat-item sick">Больничный {counts.sick}</span>
+            <span className="stat-item dual">Дуальное обучение {counts.dual}</span>
             <span className="stat-item wsk">IT HUB {counts.wsk}</span>
-            <span className="stat-item dual">Дуальное {counts.dual}</span>
-            <span className="stat-item late">Опоздание {counts.late}</span>
+            <span className="stat-item valid">По приказу {counts.valid}</span>
+            <span className="stat-item late">По заявлению {counts.late}</span>
+            <span className="stat-item absent">Без причины {counts.absent}</span>
             <span className="stat-item unmarked">Не отмечено {counts.none}</span>
           </div>
 

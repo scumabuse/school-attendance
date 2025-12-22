@@ -5,6 +5,7 @@ import { API_URL } from "../config";
 import { authHeaders, getUser, logout } from "../api/auth";
 import { getGroupAttendancePercent } from "../api/attendance";
 import HeadTabs from "../components/HeadTabs";
+import QrButton from "../components/QR/QRbutton";
 import ConfirmModal from "../components/ConfirmModal";
 import { useLocation } from "react-router-dom";
 import { useRef } from "react";
@@ -128,9 +129,12 @@ const TeacherDashboard = () => {
               (s.dual || 0) +
               (s.late || 0);
             const totalCount = presentCount + (s.absent || 0);
-            g.attendancePercent = totalCount > 0
-              ? Math.round((presentCount / totalCount) * 100)
-              : 100;
+            // Если никто не отмечен, процент должен быть 0, а не 100
+            if (s.marked === 0 || totalCount === 0) {
+              g.attendancePercent = 0;
+            } else {
+              g.attendancePercent = Math.round((presentCount / totalCount) * 100);
+            }
           });
         }
         const specsList = Array.from(
@@ -396,6 +400,11 @@ const TeacherDashboard = () => {
           )}
         </div>
       </div>
+
+      {/* Плавающая кнопка QR для преподавателя/заведующей */}
+      {teacher && (teacher.role === 'HEAD' || teacher.role === 'TEACHER') && (
+        <QrButton user={teacher} />
+      )}
     </div>
   );
 
