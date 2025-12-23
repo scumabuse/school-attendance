@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from "react";
 import HeadTabs from "../components/HeadTabs";
 import { API_URL } from "../config";
-import { authHeaders } from "../api/auth";
+import { authHeaders, getUser } from "../api/auth";
+import QrButton from "../components/QR/QRbutton";
 
 const dayNames = {
   1: "Понедельник",
@@ -46,6 +47,11 @@ const HeadSchedulePage = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
+  const [user, setUser] = useState(null);
+
+  useEffect(() => {
+    setUser(getUser());
+  }, []);
 
   const grouped = () => {
     const map = { 1: [], 2: [], 3: [], 4: [], 5: [] };
@@ -290,6 +296,10 @@ const HeadSchedulePage = () => {
           color: #0d47a1;
         }
       `}</style>
+      {/* Плавающая кнопка QR для заведующей */}
+      {user && user.role === 'HEAD' && (
+        <QrButton user={user} />
+      )}
     </HeadTabs>
   );
 };

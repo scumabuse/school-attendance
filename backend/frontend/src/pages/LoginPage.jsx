@@ -14,8 +14,13 @@ function LoginPage() {
     setError("");
 
     try {
-      await loginUser(login, password);
-      navigate("/dashboard");
+      const user = await loginUser(login, password);
+      // Если пользователь - студент, перенаправляем на /student
+      if (user.role === 'STUDENT') {
+        navigate("/student");
+      } else {
+        navigate("/dashboard");
+      }
     } catch (err) {
       setError(err.message || "Ошибка авторизации");
     }

@@ -12,7 +12,11 @@ class QrService {
     const expiresAt = new Date(Date.now() + 30 * 60 * 1000); // Срок жизни 30 минут
 
     return await prisma.qrToken.create({
-      data: { token, teacherId, expiresAt }
+      data: { 
+        token, 
+        teacherId, 
+        expiresAt 
+      }
     });
   }
 

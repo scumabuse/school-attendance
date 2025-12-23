@@ -146,3 +146,16 @@ enum QualificationType {
   IT_TECHNICIAN
   WEB_DESIGNER
 }
+
+
+model QrToken {
+  id        String   @id @default(uuid()) @db.Uuid
+  token     String   @unique
+  teacherId String   @db.Uuid // ID преподавателя/заведующей, который генерирует QR код
+  lessonId  Int?     // ID пары, на которую идет отметка (опционально)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([teacherId])
+  @@map("qr_tokens")
+}
