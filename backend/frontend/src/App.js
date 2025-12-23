@@ -5,6 +5,7 @@ import Dashboard from "./pages/Dashboard";
 import HeadStudentsPage from "./pages/HeadStudentsPage";
 import AnalyticsPage from "./pages/AnalyticsPage";
 import StudentDashboard from "./pages/StudentDashboard";
+import HeadSchedulePage from "./pages/HeadSchedulePage";
 import ProtectedRoute from "./utils/ProtectedRoute";
 
 function App() {
@@ -50,6 +51,14 @@ function App() {
           element={
             <ProtectedRoute>
               <StudentDashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/head/schedule"
+          element={
+            <ProtectedRoute>
+              <HeadSchedulePage />
             </ProtectedRoute>
           }
         />

@@ -20,6 +20,7 @@ const TeacherDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [teacher, setTeacher] = useState(null);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const [highlightedGroupId, setHighlightedGroupId] = useState(null);
   const navigate = useNavigate();
   const location = useLocation();
   const pendingScrollGroupRef = useRef(null);
@@ -112,7 +113,8 @@ const TeacherDashboard = () => {
         const groupsList = Object.values(grouped);
 
         // Для заведующей считаем ПРОЦЕНТ ЗА СЕГОДНЯ исходя из статистики по статусам:
-        // присутствующие = PRESENT, VALID_ABSENT, ITHUB, DUAL, LATE;
+        // присутствующие = PRESENT, VALID_ABSENT (с бонусом +0.2), ITHUB, DUAL;
+        // LATE (По заявлению) не влияет на процент (не входит ни в числитель, ни в знаменатель);
         // в знаменатель входят все выше + ABSENT; SICK не учитывается.
         const currentUser = getUser();
         if (currentUser && currentUser.role === 'HEAD') {
@@ -122,18 +124,22 @@ const TeacherDashboard = () => {
               g.attendancePercent = null;
               return;
             }
+            // Базовые присутствующие (без LATE)
             const presentCount =
               (s.present || 0) +
-              (s.valid || 0) +
               (s.wsk || 0) +
-              (s.dual || 0) +
-              (s.late || 0);
-            const totalCount = presentCount + (s.absent || 0);
+              (s.dual || 0);
+            // VALID_ABSENT (По приказу) повышает процент: добавляем бонус 0.2 за каждого
+            const validBonus = (s.valid || 0) * 0.2;
+            // В знаменатель входят присутствующие + VALID_ABSENT + ABSENT (LATE и SICK не учитываются)
+            const totalCount = presentCount + (s.valid || 0) + (s.absent || 0);
             // Если никто не отмечен, процент должен быть 0, а не 100
             if (s.marked === 0 || totalCount === 0) {
               g.attendancePercent = 0;
             } else {
-              g.attendancePercent = Math.round((presentCount / totalCount) * 100);
+              // Процент с учетом бонуса от VALID_ABSENT
+              const percentWithBonus = ((presentCount + (s.valid || 0) + validBonus) / totalCount) * 100;
+              g.attendancePercent = Math.min(Math.round(percentWithBonus), 100);
             }
           });
         }
@@ -226,6 +232,11 @@ const TeacherDashboard = () => {
       const el = document.getElementById(`group-${targetId}`);
       if (el) {
         el.scrollIntoView({ behavior: "smooth", block: "center" });
+        // Подсвечиваем группу синей рамкой на 4 секунды
+        setHighlightedGroupId(targetId);
+        setTimeout(() => {
+          setHighlightedGroupId(null);
+        }, 4000);
         pendingScrollGroupRef.current = null;
         pendingScrollPosRef.current = null;
         sessionStorage.removeItem('lastGroupId');
@@ -341,7 +352,7 @@ const TeacherDashboard = () => {
               <div
                 key={group.id}
                 id={`group-${group.id}`}
-                className="group-card"
+                className={`group-card ${highlightedGroupId === group.id ? 'highlighted' : ''}`}
                 onClick={() => handleGroupOpen(group.id)}
                 style={{ cursor: "pointer" }}
               >
@@ -377,6 +388,10 @@ const TeacherDashboard = () => {
                   <div className="stat">
                     <span className="label">Уважительная</span>
                     <span className="value valid">{group.stats?.valid || 0}</span>
+                  </div>
+                  <div className="stat">
+                    <span className="label">По заявлению</span>
+                    <span className="value late">{group.stats?.late || 0}</span>
                   </div>
                   <div className="stat">
                     <span className="label">Больничный</span>

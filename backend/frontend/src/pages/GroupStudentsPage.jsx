@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { API_URL } from "../config";
 import { authHeaders, getUser } from "../api/auth";
@@ -21,8 +21,25 @@ const GroupStudentsPage = () => {
   const [exportPeriod, setExportPeriod] = useState("week");
   const [exporting, setExporting] = useState(false);
   const [user, setUser] = useState(null);
+  const [schedule, setSchedule] = useState([]);
+  const [currentPair, setCurrentPair] = useState(null);
+  const prevPairRef = useRef(null);
+  const [openOrderDropdown, setOpenOrderDropdown] = useState({});
 
   const today = new Date().toISOString().slice(0, 10);
+
+  const fetchSchedule = async () => {
+    try {
+      const res = await fetch(`${API_URL}/schedule`, {
+        headers: { ...authHeaders() },
+      });
+      if (!res.ok) throw new Error("Не удалось загрузить расписание");
+      const data = await res.json();
+      setSchedule(data);
+    } catch (err) {
+      console.error("Ошибка загрузки расписания:", err);
+    }
+  };
 
   // Проверка выходных и праздников
   const checkWeekendOrHoliday = async (date) => {
@@ -115,6 +132,7 @@ const GroupStudentsPage = () => {
   useEffect(() => {
     setUser(getUser());
     if (id) fetchData();
+    fetchSchedule();
     // При размонтировании страницы — очищаем все таймеры
     return () => {
       Object.values(lateTimers).forEach((timerId) => {
@@ -122,6 +140,59 @@ const GroupStudentsPage = () => {
       });
     };
   }, [id]);
+
+  const timeToMinutes = (str) => {
+    if (!str || !str.includes(":")) return null;
+    const [h, m] = str.split(":").map((v) => parseInt(v, 10));
+    if (Number.isNaN(h) || Number.isNaN(m)) return null;
+    return h * 60 + m;
+  };
+
+  const detectCurrentPair = () => {
+    if (!schedule || schedule.length === 0) return null;
+    const now = new Date();
+    const day = now.getDay(); // 0=Sun
+    const dayOfWeek = day === 0 ? 7 : day; // Пн=1 ... Вс=7
+    const minutes = now.getHours() * 60 + now.getMinutes();
+    const todaySchedule = schedule.filter(
+      (s) => s.dayOfWeek === dayOfWeek && s.pairNumber !== 0
+    );
+    for (const s of todaySchedule) {
+      const start = timeToMinutes(s.startTime);
+      const end = timeToMinutes(s.endTime);
+      if (start !== null && end !== null && minutes >= start && minutes < end) {
+        return s.pairNumber;
+      }
+    }
+    return null;
+  };
+
+  // Сбрасываем отметки при смене пары
+  useEffect(() => {
+    if (!students || students.length === 0 || schedule.length === 0) return;
+    const check = () => {
+      const pair = detectCurrentPair();
+      const prev = prevPairRef.current;
+      if (pair !== prev) {
+        prevPairRef.current = pair;
+        setCurrentPair(pair);
+        // Очистка отметок
+        setStatuses(() => {
+          const next = {};
+          students.forEach((s) => {
+            next[s.id] = "none";
+          });
+          return next;
+        });
+        setLateMinutes({});
+        Object.values(lateTimers).forEach((timerId) => clearInterval(timerId));
+        setLateTimers({});
+      }
+    };
+    check();
+    const interval = setInterval(check, 30000);
+    return () => clearInterval(interval);
+  }, [students, schedule, lateTimers]);
 
   const toggleStatus = async (studentId, status) => {
     // Проверка на выходной/праздник
@@ -368,18 +439,40 @@ const GroupStudentsPage = () => {
                   >
                     IT HUB
                   </button>
-                  <button
-                    className={`status-btn valid ${currentStatus === "VALID_ABSENT" ? "active" : ""}`}
-                    onClick={() => toggleStatus(student.id, "VALID_ABSENT")}
-                  >
-                    По приказу
-                  </button>
-                  <button
-                    className={`status-btn late ${currentStatus === "LATE" ? "active" : ""}`}
-                    onClick={() => toggleStatus(student.id, "LATE")}
-                  >
-                    По заявлению
-                  </button>
+                  <div className="status-dropdown-container">
+                    <button
+                      className={`status-btn dropdown-btn ${currentStatus === "VALID_ABSENT" || currentStatus === "LATE" ? "active" : ""}`}
+                      onClick={() => setOpenOrderDropdown(prev => ({
+                        ...prev,
+                        [student.id]: !prev[student.id]
+                      }))}
+                    >
+                      {currentStatus === "VALID_ABSENT" ? "По приказу" : currentStatus === "LATE" ? "По заявлению" : "Ув. Причина"}
+                      <span className="dropdown-arrow-btn">▼</span>
+                    </button>
+                    {openOrderDropdown[student.id] && (
+                      <div className="status-dropdown-menu">
+                        <button
+                          className={`status-dropdown-item ${currentStatus === "VALID_ABSENT" ? "active" : ""}`}
+                          onClick={() => {
+                            toggleStatus(student.id, "VALID_ABSENT");
+                            setOpenOrderDropdown(prev => ({ ...prev, [student.id]: false }));
+                          }}
+                        >
+                          По приказу
+                        </button>
+                        <button
+                          className={`status-dropdown-item ${currentStatus === "LATE" ? "active" : ""}`}
+                          onClick={() => {
+                            toggleStatus(student.id, "LATE");
+                            setOpenOrderDropdown(prev => ({ ...prev, [student.id]: false }));
+                          }}
+                        >
+                          По заявлению
+                        </button>
+                      </div>
+                    )}
+                  </div>
                   <button
                     className={`status-btn absent ${currentStatus === "ABSENT" ? "active" : ""}`}
                     onClick={() => toggleStatus(student.id, "ABSENT")}
@@ -572,6 +665,81 @@ const GroupStudentsPage = () => {
         .status-btn:disabled {
           opacity: 0.5;
           cursor: not-allowed;
+        }
+
+        .status-dropdown-container {
+          position: relative;
+          display: inline-block;
+        }
+
+        .dropdown-btn {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+        }
+
+        .dropdown-arrow-btn {
+          font-size: 10px;
+          transition: transform 0.2s ease;
+        }
+
+        .status-dropdown-menu {
+          position: absolute;
+          top: 100%;
+          left: 0;
+          margin-top: 4px;
+          background: white;
+          border: 1px solid #ddd;
+          border-radius: 8px;
+          box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+          z-index: 1000;
+          min-width: 150px;
+          overflow: hidden;
+          animation: slideDown 0.2s ease;
+        }
+
+        @keyframes slideDown {
+          from {
+            opacity: 0;
+            transform: translateY(-5px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+
+        .status-dropdown-item {
+          display: block;
+          width: 100%;
+          padding: 10px 14px;
+          border: none;
+          background: white;
+          text-align: left;
+          font-size: 13.5px;
+          font-weight: 500;
+          cursor: pointer;
+          transition: background 0.2s;
+          border-radius: 0;
+        }
+
+        .status-dropdown-item:hover {
+          background: #f5f5f5;
+        }
+
+        .status-dropdown-item.active {
+          background: #ffe0b2;
+          color: #e65100;
+        }
+
+        .status-dropdown-item:first-child {
+          border-top-left-radius: 8px;
+          border-top-right-radius: 8px;
+        }
+
+        .status-dropdown-item:last-child {
+          border-bottom-left-radius: 8px;
+          border-bottom-right-radius: 8px;
         }
 
         .warning-banner {

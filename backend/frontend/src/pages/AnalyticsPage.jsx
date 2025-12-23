@@ -9,6 +9,8 @@ const AnalyticsPage = () => {
   const [loading, setLoading] = useState(true);
   const [period, setPeriod] = useState('academic_year');
   const [exporting, setExporting] = useState(false);
+  const [chartSortOrder, setChartSortOrder] = useState('desc'); // для "Посещаемость по группам"
+  const [tableSortOrder, setTableSortOrder] = useState('desc'); // для "Детальная статистика"
 
   useEffect(() => {
     fetchStats();
@@ -66,12 +68,21 @@ const AnalyticsPage = () => {
     }
   };
 
+  // Сортируем группы по проценту для каждой секции отдельно
+  const sortedGroupsForChart = [...stats.groups].sort((a, b) => {
+    return chartSortOrder === 'desc' ? b.percent - a.percent : a.percent - b.percent;
+  });
+
+  const sortedGroupsForTable = [...stats.groups].sort((a, b) => {
+    return tableSortOrder === 'desc' ? b.percent - a.percent : a.percent - b.percent;
+  });
+
   const maxPercent = Math.max(...stats.groups.map(g => g.percent), 100);
   
-  // Топ 3 лучших групп (лидеры)
-  const leaders = stats.groups.slice(0, 3);
-  // Топ 3 худших групп (аутсайдеры) - берем последние 3 и разворачиваем для отображения худшей первой
-  const outsiders = stats.groups.slice(-3).reverse();
+  // Топ 3 лучших групп (лидеры) - всегда по убыванию
+  const leaders = [...stats.groups].sort((a, b) => b.percent - a.percent).slice(0, 3);
+  // Топ 3 худших групп (аутсайдеры) - всегда по возрастанию, берем первые 3
+  const outsiders = [...stats.groups].sort((a, b) => a.percent - b.percent).slice(0, 3).reverse();
 
   return (
     <HeadTabs>
@@ -147,10 +158,27 @@ const AnalyticsPage = () => {
         <div className="bottom-grid">
           {/* Левая колонка — бар-чарт */}
           <section className="chart-section">
-            <h2>Посещаемость по группам</h2>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <h2>Посещаемость по группам</h2>
+              <select
+                value={chartSortOrder}
+                onChange={(e) => setChartSortOrder(e.target.value)}
+                style={{
+                  padding: '8px 12px',
+                  border: '1px solid #ddd',
+                  borderRadius: '6px',
+                  fontSize: '14px',
+                  cursor: 'pointer',
+                  backgroundColor: 'white'
+                }}
+              >
+                <option value="desc">По убыванию</option>
+                <option value="asc">По возрастанию</option>
+              </select>
+            </div>
             <div className="bars-scroll-container">
               <div className="bars-list">
-                {stats.groups.map((group) => {
+                {sortedGroupsForChart.map((group) => {
                   const width = (group.percent / maxPercent) * 100;
                   const isGood = group.percent >= 80;
                   const isMedium = group.percent >= 60 && group.percent < 80;
@@ -184,7 +212,24 @@ const AnalyticsPage = () => {
 
           {/* Правая колонка — таблица */}
           <section className="table-section">
-            <h2>Детальная статистика</h2>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <h2>Детальная статистика</h2>
+              <select
+                value={tableSortOrder}
+                onChange={(e) => setTableSortOrder(e.target.value)}
+                style={{
+                  padding: '8px 12px',
+                  border: '1px solid #ddd',
+                  borderRadius: '6px',
+                  fontSize: '14px',
+                  cursor: 'pointer',
+                  backgroundColor: 'white'
+                }}
+              >
+                <option value="desc">По убыванию</option>
+                <option value="asc">По возрастанию</option>
+              </select>
+            </div>
             <div className="table-scroll-container">
               <div className="table-wrapper">
                 <table className="analytics-table">
@@ -197,7 +242,7 @@ const AnalyticsPage = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {stats.groups.map((group) => {
+                    {sortedGroupsForTable.map((group) => {
                       const isGood = group.percent >= 80;
                       const isMedium = group.percent >= 60 && group.percent < 80;
                       return (
