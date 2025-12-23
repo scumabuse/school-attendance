@@ -25,6 +25,7 @@ const STATUS_COLORS = {
   'IT': 'C300FF',
   'Д': 'FFADD8E6',
   'ОП': 'FFFFA500',
+  'Пр': 'FFADD8E6',
   'Вых': 'FFDDDDDD'
 };
 
@@ -146,29 +147,39 @@ async function exportAttendanceService(prisma, req, res) {
         end.toJSDate()
       );
 
-      academicDays.forEach(dateStr => {
+      for (const dateStr of academicDays) {
         const cell = row.getCell(dateStr);
         const record = attendanceMap.get(`${student.id}_${dateStr}`);
 
         const dt = DateTime.fromISO(dateStr).setZone(ATTENDANCE_TIMEZONE);
-        const isWeekend = dt.weekday === 6 || dt.weekday === 7; // суббота или воскресенье
+
+        const isWeekend = dt.weekday === 6 || dt.weekday === 7;
+
         const isHoliday = holidays.some(h => {
           const holidayDate = DateTime.fromJSDate(h.date).toISODate();
           return holidayDate === dateStr;
         });
 
-        let display;
-        let bgColor;
+        // ←←← НОВАЯ ПРОВЕРКА ПРАКТИКИ ←←←
+        const practice = await prisma.practiceDay.findUnique({
+          where: {
+            groupId_date: {
+              groupId: student.groupId,
+              date: dt.toJSDate()
+            }
+          }
+        });
+        const isPractice = !!practice;
 
-        if (isWeekend || isHoliday) {
-          display = 'Вых'; // Можно сделать 'В' или 'Выходной' — как хочешь
-          bgColor = 'FFDDDDDD'; // серый фон для выходных
+        let display = 'О';
+        let bgColor = STATUS_COLORS['О'];
+
+        if (isWeekend || isHoliday || isPractice) {
+          display = isPractice ? 'Пр' : 'Вых';
+          bgColor = isPractice ? STATUS_COLORS['Пр'] : STATUS_COLORS['Вых'];
         } else if (record) {
           display = STATUS_MAP[record.status] || 'О';
           bgColor = STATUS_COLORS[display] || STATUS_COLORS['О'];
-        } else {
-          display = 'О'; // обычный прогул
-          bgColor = STATUS_COLORS['О'];
         }
 
         cell.value = display;
@@ -178,19 +189,22 @@ async function exportAttendanceService(prisma, req, res) {
           fgColor: { argb: bgColor }
         };
 
-        // Подсказка только для опозданий
+        // Подсказки
         if (record?.status === 'LATE' && record?.lateMinutes != null) {
           cell.note = `Опоздание: ${record.lateMinutes} мин`;
         }
 
-        // Можно добавить подсказку и для праздника
         if (isHoliday) {
           const holiday = holidays.find(h => DateTime.fromJSDate(h.date).toISODate() === dateStr);
           if (holiday?.name) {
             cell.note = holiday.name;
           }
         }
-      });
+
+        if (isPractice && practice?.name) {
+          cell.note = `Практика: ${practice.name}`;
+        }
+      }
 
       row.getCell('percent').value = `${stats.percent}%`;
       row.getCell('percent').font = { bold: true };

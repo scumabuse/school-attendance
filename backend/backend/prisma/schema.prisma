@@ -44,6 +44,8 @@ model Group {
   curator       User?        @relation("UserCuratesGroup", fields: [curatorId], references: [id])
   specialty     Specialty    @relation(fields: [specialtyId], references: [id])
   students      Student[]
+  practiceDays PracticeDay[]
+  
 
   @@index([admissionYear])
   @@index([course])
@@ -106,6 +108,17 @@ model Holiday {
 
   @@index([date])
   @@map("holidays")
+}
+
+model PracticeDay {
+  id        String   @id @default(uuid())
+  groupId   String   @db.Uuid  
+  date      DateTime @db.Date
+  name      String?
+
+  group     Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@unique([groupId, date])
 }
 
 enum UserRole {

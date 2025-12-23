@@ -8,7 +8,7 @@ const QrButton = ({ user }) => {
     <>
       <button 
         onClick={() => setIsOpen(true)}
-        style={{ position: 'fixed', bottom: '25px', right: '25px', width: '60px', height: '60px', borderRadius: '50%', backgroundColor: '#007bff', color: 'white', border: 'none', cursor: 'pointer', boxShadow: '0 4px 10px rgba(0,0,0,0.3)', zIndex: 1000, fontSize: '20px' }}
+        style={{ position: 'fixed', bottom: '83px', right: '25px', width: '60px', height: '60px', borderRadius: '50%', backgroundColor: '#007bff', color: 'white', border: 'none', cursor: 'pointer', boxShadow: '0 4px 10px rgba(0,0,0,0.3)', zIndex: 1000, fontSize: '20px' }}
       >
         QR
       </button>

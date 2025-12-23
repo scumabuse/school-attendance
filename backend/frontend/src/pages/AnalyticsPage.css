@@ -346,11 +346,12 @@
   border-radius: 12px;
   background: white;
   box-sizing: border-box;
+  overflow-x: hidden;
 }
 
 .table-wrapper {
   width: 100%;
-  min-width: 600px; /* чтобы таблица не сжималась слишком сильно на десктопе */
+  min-width: unset; /* чтобы таблица не сжималась слишком сильно на десктопе */
 }
 
 /* Красивый скроллбар для таблицы тоже */

@@ -24,6 +24,8 @@ const GroupStudentsPage = () => {
   const [customStart, setCustomStart] = useState('');
   const [customEnd, setCustomEnd] = useState('');
   const [showCustomDates, setShowCustomDates] = useState(false);
+  const [isPractice, setIsPractice] = useState(false);
+  const [practiceReason, setPracticeReason] = useState("");
 
   const today = new Date().toISOString().slice(0, 10);
 
@@ -65,10 +67,31 @@ const GroupStudentsPage = () => {
     return false;
   };
 
+  const checkPracticeDay = async (groupId, date) => {
+    try {
+      const res = await fetch(`${API_URL}/practice-days/check?groupId=${groupId}&date=${date}`, {
+        headers: { ...authHeaders() }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.isPractice) {
+          setIsPractice(true);
+          setPracticeReason(data.name || "производственная практика");
+        } else {
+          setIsPractice(false);
+          setPracticeReason("");
+        }
+      }
+    } catch (err) {
+      console.error("Ошибка проверки практики:", err);
+    }
+  };
+
   const fetchData = async () => {
     try {
       // Проверяем, не выходной ли сегодня
       await checkWeekendOrHoliday(today);
+      await checkPracticeDay(id, today);
 
       const res = await fetch(`${API_URL}/students?groupId=${id}`, {
         headers: { ...authHeaders() },
@@ -114,6 +137,7 @@ const GroupStudentsPage = () => {
       setLoading(false);
     }
   };
+
 
   useEffect(() => {
     const today = new Date().toISOString().slice(0, 10);
@@ -429,7 +453,12 @@ const GroupStudentsPage = () => {
 
         {isWeekendOrHoliday && (
           <div className="warning-banner">
-            ⚠️ {blockReason} — отметка посещаемости недоступна
+            {blockReason} — отметка посещаемости недоступна
+          </div>
+        )}
+        {isPractice && (
+          <div className="warning-banner practice-banner">
+            Сегодня {practiceReason} — отметка посещаемости недоступна
           </div>
         )}
 
@@ -444,44 +473,49 @@ const GroupStudentsPage = () => {
                   <button
                     className={`status-btn present ${currentStatus === "PRESENT" ? "active" : ""}`}
                     onClick={() => toggleStatus(student.id, "PRESENT")}
+                    disabled={isPractice || isWeekendOrHoliday}
                   >
                     Присутствует
                   </button>
                   <button
                     className={`status-btn absent ${currentStatus === "ABSENT" ? "active" : ""}`}
                     onClick={() => toggleStatus(student.id, "ABSENT")}
+                    disabled={isPractice || isWeekendOrHoliday}
                   >
                     Отсутствует
                   </button>
                   <button
                     className={`status-btn sick ${currentStatus === "SICK" ? "active" : ""}`}
                     onClick={() => toggleStatus(student.id, "SICK")}
+                    disabled={isPractice || isWeekendOrHoliday}
                   >
                     Больничный
                   </button>
                   <button
                     className={`status-btn valid ${currentStatus === "VALID_ABSENT" ? "active" : ""}`}
                     onClick={() => toggleStatus(student.id, "VALID_ABSENT")}
+                    disabled={isPractice || isWeekendOrHoliday}
                   >
                     Уважительная
                   </button>
                   <button
                     className={`status-btn wsk ${currentStatus === "ITHUB" ? "active" : ""}`}
                     onClick={() => toggleStatus(student.id, "ITHUB")}
+                    disabled={isPractice || isWeekendOrHoliday}
                   >
                     IT HUB
                   </button>
                   <button
                     className={`status-btn dual ${currentStatus === "DUAL" ? "active" : ""}`}
                     onClick={() => toggleStatus(student.id, "DUAL")}
-                    disabled={isWeekendOrHoliday}
+                    disabled={isPractice || isWeekendOrHoliday}
                   >
                     Д
                   </button>
                   <button
                     className={`status-btn late ${currentStatus === "LATE" ? "active" : ""}`}
                     onClick={() => toggleStatus(student.id, "LATE")}
-                    disabled={isWeekendOrHoliday}
+                    disabled={isPractice || isWeekendOrHoliday}
                   >
                     {currentStatus === "LATE" && lateMinutes[student.id] !== undefined
                       ? (() => {
@@ -515,7 +549,7 @@ const GroupStudentsPage = () => {
           <button
             className="save-btn"
             onClick={handleSave}
-            disabled={saving || counts.none === students.length || isWeekendOrHoliday}
+            disabled={saving || counts.none === students.length || isWeekendOrHoliday || isPractice}
           >
             {saving ? "Сохраняется..." : "Сохранить посещаемость"}
           </button>
@@ -741,6 +775,12 @@ const GroupStudentsPage = () => {
           font-weight: bold;
           cursor: pointer;
           transition: background 0.2s;
+        }
+
+        .practice-banner {
+          background: #e3f2fd;
+          border: 1px solid #2196f3;
+          color: #1565c0;
         }
 
         .save-btn:hover:not(:disabled) {

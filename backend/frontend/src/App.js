@@ -6,6 +6,7 @@ import HeadStudentsPage from "./pages/HeadStudentsPage";
 import AnalyticsPage from "./pages/AnalyticsPage";
 import ProtectedRoute from "./utils/ProtectedRoute";
 import StudentDashboard from "./pages/StudentDashboard";
+import PracticeDaysPage from "./pages/PracticeDaysPage";
 
 function App() {
   return (
@@ -53,6 +54,7 @@ function App() {
           </ProtectedRoute>
         }
         />
+        <Route path="/practice-days" element={<PracticeDaysPage />} />
       </Routes>
     </BrowserRouter >
   );

@@ -73,6 +73,18 @@ async function calculateLateMinutes(groupId, date, markedAt) {
   }
 }
 
+async function isPracticeDay(groupId, date) {
+  const practice = await prisma.practiceDay.findUnique({
+    where: {
+      groupId_date: {
+        groupId,
+        date
+      }
+    }
+  });
+  return practice ? practice : null; // возвращаем объект практики, если есть
+}
+
 /**
  * GET /api/attendance/log
  * Получить лог посещаемости
@@ -104,52 +116,47 @@ router.get('/log', async (req, res) => {
         lt: endOfDay
       };
 
-      console.log('LOG DATE RANGE:', startOfDay.toISOString(), 'to', endOfDay.toISOString());
-      console.log('Запрос логов для даты:', date, 'Диапазон:', startOfDay, 'до', endOfDay);
-    
-  } else if (startDate || endDate) {
-    // Период
-    where.date = {};
-    if (startDate) {
-      where.date.gte = new Date(startDate);
+    } else if (startDate || endDate) {
+      // Период
+      where.date = {};
+      if (startDate) {
+        where.date.gte = new Date(startDate);
+      }
+      if (endDate) {
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999);
+        where.date.lte = end;
+      }
     }
-    if (endDate) {
-      const end = new Date(endDate);
-      end.setHours(23, 59, 59, 999);
-      where.date.lte = end;
-    }
+
+    const logs = await prisma.attendance.findMany({
+      where,
+      include: {
+        student: { select: { fullName: true } },
+        group: { select: { name: true } },
+        updatedBy: { select: { fullName: true } }
+      },
+      orderBy: { date: 'desc' }
+    });
+
+    console.log('Найдено логов:', logs.length, 'для запроса:', JSON.stringify(where));
+
+    res.json(logs.map(l => ({
+      id: l.id,
+      studentId: l.studentId,
+      groupId: l.groupId,
+      fullName: l.student.fullName,
+      groupName: l.group.name,
+      status: l.status,
+      date: l.date,
+      updatedAt: l.updatedAt,
+      updatedBy: l.updatedBy?.fullName || 'Система'
+    })));
+
+  } catch (err) {
+    console.error('Ошибка получения лога посещаемости:', err);
+    res.status(500).json({ error: 'Ошибка сервера' });
   }
-
-  const logs = await prisma.attendance.findMany({
-    where,
-    include: {
-      student: { select: { fullName: true } },
-      group: { select: { name: true } },
-      updatedBy: { select: { fullName: true } }
-    },
-    orderBy: { date: 'desc' }
-  });
-
-  console.log('Найдено логов:', logs.length, 'для запроса:', JSON.stringify(where));
-
-  console.log('LOGS TO SEND:', logs);
-
-  res.json(logs.map(l => ({
-    id: l.id,
-    studentId: l.studentId,
-    groupId: l.groupId,
-    fullName: l.student.fullName,
-    groupName: l.group.name,
-    status: l.status,
-    date: l.date,
-    updatedAt: l.updatedAt,
-    updatedBy: l.updatedBy?.fullName || 'Система'
-  })));
-
-} catch (err) {
-  console.error('Ошибка получения лога посещаемости:', err);
-  res.status(500).json({ error: 'Ошибка сервера' });
-}
 });
 /**
  * GET /api/attendance
@@ -273,6 +280,14 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ error: 'Нельзя отметить посещаемость в праздничный день' });
     }
 
+    const practice = await isPracticeDay(groupId, cleanDate);
+    if (practice) {
+      return res.status(403).json({
+        error: 'Нельзя отметить посещаемость: сегодня день практики',
+        practiceName: practice.name
+      });
+    }
+
     const updatedById = req.user?.id || null;
 
     // Для статуса LATE вычисляем опоздание
@@ -354,6 +369,14 @@ router.put('/:id', async (req, res) => {
       return res.status(400).json({ error: 'Нельзя отметить посещаемость в праздничный день' });
     }
 
+    const practice = await isPracticeDay(groupId, cleanDate);
+    if (practice) {
+      return res.status(403).json({
+        error: 'Нельзя отметить посещаемость: сегодня день практики',
+        practiceName: practice.name
+      });
+    }
+
     const data = { status, updatedById: req.user?.id || null };
 
     if (date) {
@@ -424,6 +447,14 @@ router.patch('/:id', async (req, res) => {
 
     if (await isHoliday(current.date)) {
       return res.status(400).json({ error: 'Нельзя отметить посещаемость в праздничный день' });
+    }
+
+    const practice = await isPracticeDay(groupId, cleanDate);
+    if (practice) {
+      return res.status(403).json({
+        error: 'Нельзя отметить посещаемость: сегодня день практики',
+        practiceName: practice.name
+      });
     }
 
     // Для статуса LATE вычисляем опоздание
@@ -512,6 +543,14 @@ router.post('/batch', async (req, res) => {
         if (await isHoliday(cleanDate)) {
           errors.push(`Праздничный день: ${date}`);
           continue;
+        }
+
+        const practice = await isPracticeDay(groupId, cleanDate);
+        if (practice) {
+          return res.status(403).json({
+            error: 'Нельзя отметить посещаемость: сегодня день практики',
+            practiceName: practice.name
+          });
         }
 
         const updatedById = req.user?.id || null;

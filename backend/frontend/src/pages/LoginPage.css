@@ -72,9 +72,22 @@
 }
 
 /* Адаптивность для телефонов */
+@media (max-width: 768px) {
+  .login-container::before {
+    background-size: 80% auto; /* логотип больше, но вписывается */
+    opacity: 0.12;            /* чуть менее заметный */
+  }
+}
+
 @media (max-width: 480px) {
   .login-container {
     padding: 15px;
+  }
+
+  .login-container::before {
+    background-size: 50% auto;   /* почти на всю ширину */
+    background-position: center 16%; /* чуть выше центра */
+    opacity: 0.1;
   }
 
   .login-card {

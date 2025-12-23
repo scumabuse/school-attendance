@@ -49,6 +49,56 @@ const AnalyticsPage = () => {
       }
 
       const data = await res.json();
+
+      // ←←← НОВАЯ ФИЛЬТРАЦИЯ: убираем группы на практике (только для "today")
+      if (['today', 'week', 'month'].includes(period)) {
+        // Определяем диапазон дат для периода
+        const now = new Date();
+        const todayStr = now.toISOString().slice(0, 10);
+
+        let startDate, endDate;
+
+        if (period === 'today') {
+          startDate = endDate = todayStr;
+        } else if (period === 'week') {
+          const start = new Date(now);
+          start.setDate(now.getDate() - 6);
+          startDate = start.toISOString().slice(0, 10);
+          endDate = todayStr;
+        } else if (period === 'month') {
+          const start = new Date(now.getFullYear(), now.getMonth(), 1);
+          startDate = start.toISOString().slice(0, 10);
+          endDate = todayStr;
+        }
+
+        // Запрашиваем группы, у которых есть практика в этом диапазоне
+        const practiceRes = await fetch(
+          `${API_URL}/practice-days/range?start=${startDate}&end=${endDate}`,
+          { headers: { ...authHeaders() } }
+        );
+
+        if (practiceRes.ok) {
+          const practiceGroups = await practiceRes.json(); // массив { groupId: '...' }
+          const practiceSet = new Set(practiceGroups.map(g => g.groupId));
+
+          // Скрываем группы, у которых есть практика в периоде
+          data.groups = data.groups.filter(g => !practiceSet.has(g.groupId));
+
+          // Пересчитываем статистику
+          if (data.groups.length > 0) {
+            data.averagePercent = Math.round(
+              data.groups.reduce((sum, g) => sum + g.percent, 0) / data.groups.length
+            );
+          } else {
+            data.averagePercent = 0;
+          }
+
+          const sorted = [...data.groups].sort((a, b) => b.percent - a.percent);
+          data.bestGroup = sorted[0] || null;
+          data.worstGroup = sorted[sorted.length - 1] || null;
+        }
+      }
+
       setStats(data);
     } catch (err) {
       console.error('Ошибка загрузки аналитики:', err);

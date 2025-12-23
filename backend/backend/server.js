@@ -53,6 +53,13 @@ const isHeadOrAdmin = (req, res, next) => {
   next();
 };
 
+const isAdmin = async (req, res, next) => {
+  if (!req.user || req.user.role !== 'ADMIN') {
+    return res.status(403).json({ error: 'Доступ запрещён: требуется роль ADMIN' });
+  }
+  next();
+};
+
 const getCurrentCourse = (admissionYear) => {
   const now = DateTime.now().setZone(ATTENDANCE_TIMEZONE);
   const currentYear = now.month >= 9 ? now.year : now.year - 1;
@@ -508,6 +515,25 @@ app.patch('/api/admin/groups/:id', authenticate, isHeadOrAdmin, async (req, res)
   }
 });
 
+// GET /api/groups — получить все группы
+app.get('/api/groups', authenticate, async (req, res) => {
+  try {
+    const groups = await prisma.group.findMany({
+      select: {
+        id: true,
+        name: true,
+        course: true,
+        admissionYear: true
+      },
+      orderBy: { name: 'asc' }
+    });
+    res.json(groups);
+  } catch (err) {
+    console.error('Ошибка получения групп:', err);
+    res.status(500).json({ error: 'Ошибка сервера' });
+  }
+});
+
 // Удалить группу
 app.delete('/api/admin/groups/:id', authenticate, isHeadOrAdmin, async (req, res) => {
   await prisma.group.delete({ where: { id: req.params.id } });
@@ -912,5 +938,140 @@ app.get('/api/attendance/student/:id/percent', authenticate, async (req, res) =>
 // ТЕСТ
 // ===================================
 app.get('/api/test', (req, res) => res.json({ message: 'Бэкенд работает!' }));
+
+// POST /api/practice-days/batch
+// Добавляет дни практики для группы в диапазоне дат
+app.post('/api/practice-days/batch', authenticate, isAdmin, async (req, res) => {
+  try {
+    const { groupId, startDate, endDate, name } = req.body;
+
+    if (!groupId || !startDate || !endDate) {
+      return res.status(400).json({ error: 'groupId, startDate и endDate обязательны' });
+    }
+
+    const group = await prisma.group.findUnique({ where: { id: groupId } });
+    if (!group) {
+      return res.status(400).json({ error: 'Группа не найдена' });
+    }
+
+    const start = DateTime.fromISO(startDate).startOf('day');
+    const end = DateTime.fromISO(endDate).startOf('day');
+
+    if (start > end) {
+      return res.status(400).json({ error: 'Начальная дата не может быть позже конечной' });
+    }
+
+    const days = [];
+    let current = start;
+    while (current <= end) {
+      days.push(current.toJSDate());
+      current = current.plus({ days: 1 });
+    }
+
+    const created = [];
+    const skipped = [];
+
+    for (const date of days) {
+      try {
+        const practice = await prisma.practiceDay.upsert({
+          where: { groupId_date: { groupId, date } },
+          update: { name: name || null },
+          create: { groupId, date, name: name || null }
+        });
+        created.push(practice);
+      } catch (err) {
+        skipped.push(date.toISOString().slice(0, 10));
+      }
+    }
+
+    res.json({
+      message: `Добавлено ${created.length} дней практики`,
+      skipped: skipped.length > 0 ? skipped : undefined
+    });
+  } catch (err) {
+    console.error('Ошибка добавления дней практики:', err);
+    res.status(500).json({ error: 'Ошибка сервера' });
+  }
+});
+
+// GET /api/practice-days/check?groupId=...&date=2025-12-23
+// Проверяет, является ли день практикой для группы
+app.get('/api/practice-days/check', authenticate, async (req, res) => {
+  try {
+    const { groupId, date } = req.query;
+
+    if (!groupId || !date) {
+      return res.status(400).json({ error: 'groupId и date обязательны' });
+    }
+
+    // Приводим дату к началу дня (как в других местах)
+    const cleanDate = new Date(date);
+    cleanDate.setHours(0, 0, 0, 0);
+
+    const practice = await prisma.practiceDay.findUnique({
+      where: {
+        groupId_date: {
+          groupId,
+          date: cleanDate
+        }
+      }
+    });
+
+    res.json({
+      isPractice: !!practice,
+      name: practice?.name || 'практика'
+    });
+  } catch (err) {
+    console.error('Ошибка проверки дня практики:', err);
+    res.status(500).json({ error: 'Ошибка сервера' });
+  }
+});
+
+// GET /api/practice-days/today — группы на практике сегодня
+app.get('/api/practice-days/today', authenticate, isHeadOrAdmin, async (req, res) => {
+  try {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const practices = await prisma.practiceDay.findMany({
+      where: { date: today },
+      select: { groupId: true }
+    });
+
+    res.json(practices);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Ошибка' });
+  }
+});
+
+app.get('/api/practice-days/range', authenticate, isHeadOrAdmin, async (req, res) => {
+  try {
+    const { start, end } = req.query;
+    if (!start || !end) {
+      return res.status(400).json({ error: 'start и end обязательны' });
+    }
+
+    const startDate = new Date(start);
+    const endDate = new Date(end);
+    endDate.setHours(23, 59, 59, 999);
+
+    const practices = await prisma.practiceDay.findMany({
+      where: {
+        date: {
+          gte: startDate,
+          lte: endDate
+        }
+      },
+      select: { groupId: true },
+      distinct: ['groupId'] // только уникальные группы
+    });
+
+    res.json(practices);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Ошибка сервера' });
+  }
+});
 
 console.log(chalk.bold.green('Сервер готов к бою.'));
