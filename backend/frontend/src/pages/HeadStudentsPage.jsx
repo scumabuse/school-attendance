@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { API_URL } from "../config";
 import { authHeaders, getUser } from "../api/auth";
 import { getStudentAttendancePercent } from "../api/attendance";
+import QrButton from "../components/QR/QRbutton";
 
 const PAGE_SIZE = 100;
 
@@ -473,6 +474,10 @@ const HeadStudentsPage = () => {
           }
         }
       `}</style>
+      {/* Плавающая кнопка QR для заведующей */}
+      {user && user.role === 'HEAD' && (
+        <QrButton user={user} />
+      )}
     </div>
   );
 };

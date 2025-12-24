@@ -88,9 +88,31 @@
   text-align: center;
 }
 
+.leaders-item, .outsiders-item {
+  text-align: left;
+}
+
 .summary-label {
   font-size: 14px;
   color: #64748b;
+  margin-bottom: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-weight: 500;
+}
+
+.summary-label-lider {
+  font-size: 14px;
+  color: #00d20a;
+  margin-bottom: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-weight: 500;
+}
+
+.summary-labe-loser {
+  font-size: 14px;
+  color: #ff0000;
   margin-bottom: 8px;
   text-transform: uppercase;
   letter-spacing: 0.5px;

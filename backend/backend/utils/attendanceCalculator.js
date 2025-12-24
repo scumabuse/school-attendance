@@ -6,13 +6,13 @@ const { DateTime } = require('luxon');
  * Меняется ТОЛЬКО ЗДЕСЬ
  */
 const ATTENDANCE_RULES = {
-  PRESENT:       { isPresent: true,  countsInTotal: true  }, // П
-  VALID_ABSENT:  { isPresent: true,  countsInTotal: true  }, // У
-  ITHUB:         { isPresent: true,  countsInTotal: true  }, // IT
-  DUAL:          { isPresent: true,  countsInTotal: true  }, // Д
-  LATE:          { isPresent: true,  countsInTotal: true  }, // ОП
-  ABSENT:        { isPresent: false, countsInTotal: true  }, // О
-  SICK:          { isPresent: false, countsInTotal: false }, // Б
+  PRESENT:       { isPresent: true,  countsInTotal: true,  bonus: 0   }, // П
+  VALID_ABSENT:  { isPresent: true,  countsInTotal: true,  bonus: 0.2 }, // У (По приказу) - повышает процент
+  ITHUB:         { isPresent: true,  countsInTotal: true,  bonus: 0   }, // IT
+  DUAL:          { isPresent: true,  countsInTotal: true,  bonus: 0   }, // Д
+  LATE:          { isPresent: false, countsInTotal: false, bonus: 0   }, // ОП (По заявлению) - не влияет на процент
+  ABSENT:        { isPresent: false, countsInTotal: true,  bonus: 0   }, // О
+  SICK:          { isPresent: false, countsInTotal: false, bonus: 0   }, // Б
 };
 
 /**
@@ -54,6 +54,7 @@ async function calculateAttendance(
 
   let totalDays = 0;
   let presentDays = 0;
+  let bonusPoints = 0;
 
   academicDays.forEach(dateStr => {
     const status = recordsMap.get(dateStr) || 'ABSENT';
@@ -62,16 +63,25 @@ async function calculateAttendance(
 
     if (rule.countsInTotal) {
       totalDays++;
-      if (rule.isPresent) presentDays++;
+      if (rule.isPresent) {
+        presentDays++;
+        // Добавляем бонусные очки для VALID_ABSENT (По приказу)
+        bonusPoints += rule.bonus || 0;
+      }
     }
   });
 
+  // Рассчитываем процент с учетом бонусов
+  // Бонус добавляется к числителю (presentDays), что повышает процент
   const percent = totalDays > 0
-    ? Math.round((presentDays / totalDays) * 100)
+    ? Math.round(((presentDays + bonusPoints) / totalDays) * 100)
     : 100;
+  
+  // Ограничиваем процент максимумом 100%
+  const finalPercent = Math.min(percent, 100);
 
   return {
-    percent,
+    percent: finalPercent,
     presentDays,
     totalDays,
     absentDays: totalDays - presentDays

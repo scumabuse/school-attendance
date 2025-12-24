@@ -4,6 +4,8 @@ import GroupStudentsPage from "./pages/GroupStudentsPage";
 import Dashboard from "./pages/Dashboard";
 import HeadStudentsPage from "./pages/HeadStudentsPage";
 import AnalyticsPage from "./pages/AnalyticsPage";
+import StudentDashboard from "./pages/StudentDashboard";
+import HeadSchedulePage from "./pages/HeadSchedulePage";
 import ProtectedRoute from "./utils/ProtectedRoute";
 import StudentDashboard from "./pages/StudentDashboard";
 import PracticeDaysPage from "./pages/PracticeDaysPage";

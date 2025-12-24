@@ -97,6 +97,28 @@
   flex: 1 1 400px;             /* гибкая ширина: минимум 400px, растягивается */
   max-width: 500px;           /* ограничиваем максимум, чтобы не раздувались */
   box-sizing: border-box;
+  transition: all 0.3s ease;
+}
+
+.group-card.highlighted {
+  border: 3px solid #1976d2;
+  box-shadow: 0 0 20px rgba(25, 118, 210, 0.6), 0 4px 12px rgba(0,0,0,0.1);
+  animation: highlightPulse 4s ease-in-out;
+}
+
+@keyframes highlightPulse {
+  0% {
+    border-color: #1976d2;
+    box-shadow: 0 0 20px rgba(25, 118, 210, 0.6), 0 4px 12px rgba(0,0,0,0.1);
+  }
+  50% {
+    border-color: #42a5f5;
+    box-shadow: 0 0 30px rgba(25, 118, 210, 0.8), 0 4px 12px rgba(0,0,0,0.1);
+  }
+  100% {
+    border-color: #1976d2;
+    box-shadow: 0 0 20px rgba(25, 118, 210, 0.6), 0 4px 12px rgba(0,0,0,0.1);
+  }
 }
 
 .group-header {
@@ -140,6 +162,7 @@
   font-size: 24px;
   font-weight: bold;
 }
+
 
 .present { color: #4caf50; }
 .absent { color: #f44336; }

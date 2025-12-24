@@ -5,6 +5,7 @@ import { API_URL } from "../config";
 import { authHeaders, getUser, logout } from "../api/auth";
 import { getGroupAttendancePercent } from "../api/attendance";
 import HeadTabs from "../components/HeadTabs";
+import QrButton from "../components/QR/QRbutton";
 import ConfirmModal from "../components/ConfirmModal";
 import { useLocation } from "react-router-dom";
 import { useRef } from "react";
@@ -20,6 +21,7 @@ const TeacherDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [teacher, setTeacher] = useState(null);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const [highlightedGroupId, setHighlightedGroupId] = useState(null);
   const navigate = useNavigate();
   const location = useLocation();
   const pendingScrollGroupRef = useRef(null);
@@ -112,7 +114,8 @@ const TeacherDashboard = () => {
         const groupsList = Object.values(grouped);
 
         // Для заведующей считаем ПРОЦЕНТ ЗА СЕГОДНЯ исходя из статистики по статусам:
-        // присутствующие = PRESENT, VALID_ABSENT, ITHUB, DUAL, LATE;
+        // присутствующие = PRESENT, VALID_ABSENT (с бонусом +0.2), ITHUB, DUAL;
+        // LATE (По заявлению) не влияет на процент (не входит ни в числитель, ни в знаменатель);
         // в знаменатель входят все выше + ABSENT; SICK не учитывается.
         const currentUser = getUser();
         if (currentUser && currentUser.role === 'HEAD') {
@@ -122,11 +125,15 @@ const TeacherDashboard = () => {
               g.attendancePercent = 0; // если нет stats — 0%
               return;
             }
+<<<<<<< HEAD
             const markedCount = s.marked || 0;
+=======
+            // Базовые присутствующие (без LATE)
+>>>>>>> origin/experiment-features
             const presentCount =
               (s.present || 0) +
-              (s.valid || 0) +
               (s.wsk || 0) +
+<<<<<<< HEAD
               (s.dual || 0) +
               (s.late || 0);
             const totalCount = presentCount + (s.absent || 0);
@@ -136,6 +143,21 @@ const TeacherDashboard = () => {
               : totalCount > 0
                 ? Math.round((presentCount / totalCount) * 100)
                 : 100;
+=======
+              (s.dual || 0);
+            // VALID_ABSENT (По приказу) повышает процент: добавляем бонус 0.2 за каждого
+            const validBonus = (s.valid || 0) * 0.2;
+            // В знаменатель входят присутствующие + VALID_ABSENT + ABSENT (LATE и SICK не учитываются)
+            const totalCount = presentCount + (s.valid || 0) + (s.absent || 0);
+            // Если никто не отмечен, процент должен быть 0, а не 100
+            if (s.marked === 0 || totalCount === 0) {
+              g.attendancePercent = 0;
+            } else {
+              // Процент с учетом бонуса от VALID_ABSENT
+              const percentWithBonus = ((presentCount + (s.valid || 0) + validBonus) / totalCount) * 100;
+              g.attendancePercent = Math.min(Math.round(percentWithBonus), 100);
+            }
+>>>>>>> origin/experiment-features
           });
         }
         const specsList = Array.from(
@@ -227,6 +249,11 @@ const TeacherDashboard = () => {
       const el = document.getElementById(`group-${targetId}`);
       if (el) {
         el.scrollIntoView({ behavior: "smooth", block: "center" });
+        // Подсвечиваем группу синей рамкой на 4 секунды
+        setHighlightedGroupId(targetId);
+        setTimeout(() => {
+          setHighlightedGroupId(null);
+        }, 4000);
         pendingScrollGroupRef.current = null;
         pendingScrollPosRef.current = null;
         sessionStorage.removeItem('lastGroupId');
@@ -342,7 +369,7 @@ const TeacherDashboard = () => {
               <div
                 key={group.id}
                 id={`group-${group.id}`}
-                className="group-card"
+                className={`group-card ${highlightedGroupId === group.id ? 'highlighted' : ''}`}
                 onClick={() => handleGroupOpen(group.id)}
                 style={{ cursor: "pointer" }}
               >
@@ -380,6 +407,10 @@ const TeacherDashboard = () => {
                     <span className="value valid">{group.stats?.valid || 0}</span>
                   </div>
                   <div className="stat">
+                    <span className="label">По заявлению</span>
+                    <span className="value late">{group.stats?.late || 0}</span>
+                  </div>
+                  <div className="stat">
                     <span className="label">Больничный</span>
                     <span className="value sick">{group.stats?.sick || 0}</span>
                   </div>
@@ -401,7 +432,11 @@ const TeacherDashboard = () => {
           )}
         </div>
       </div>
+<<<<<<< HEAD
       
+=======
+
+>>>>>>> origin/experiment-features
       {/* Плавающая кнопка QR для преподавателя/заведующей */}
       {teacher && (teacher.role === 'HEAD' || teacher.role === 'TEACHER') && (
         <QrButton user={teacher} />

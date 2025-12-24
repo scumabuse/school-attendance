@@ -3,6 +3,7 @@
 
 const express = require('express');
 const { PrismaClient } = require('@prisma/client');
+const qrService = require('../../services/QRservice');
 const { DateTime } = require('luxon');
 const ATTENDANCE_TIMEZONE = 'Asia/Almaty';
 const router = express.Router();
