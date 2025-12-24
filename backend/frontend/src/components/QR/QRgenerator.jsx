@@ -4,17 +4,26 @@ import axios from 'axios';
 import { API_URL } from '../../config';
 import { authHeaders } from '../../api/auth';
 
-const QrGenerator = ({ teacherId }) => {
+// Добавляем lessonId в пропсы
+const QrGenerator = ({ teacherId, lessonId }) => {
   const [token, setToken] = useState('');
   const [error, setError] = useState('');
 
   const fetchToken = async () => {
+    // Если нет ID учителя или пары, не делаем запрос
+    if (!teacherId || !lessonId) {
+        setError('Не выбран преподаватель или учебное занятие');
+        return;
+    }
+
     try {
       setError('');
+      // Обновленный URL: добавляем lessonId в конец
       const res = await axios.get(
-        `${API_URL}/attendance/qr/refresh/${teacherId}`,
+        `${API_URL}/attendance/qr/refresh/${teacherId}/${lessonId}`,
         { headers: { ...authHeaders() } }
       );
+      
       if (res.data && res.data.token) {
         setToken(res.data.token);
       } else {
@@ -27,13 +36,15 @@ const QrGenerator = ({ teacherId }) => {
   };
 
   useEffect(() => {
-    if (!teacherId) return;
     fetchToken();
-    // Токен живет 30 минут, обновляем чуть раньше истечения (29 минут)
-    const interval = setInterval(fetchToken, 29 * 60 * 1000);
+
+    // ВАЖНО: Токен в новой логике живет 1 минуту (60000 мс).
+    // Обновляем его каждые 55 секунд, чтобы QR всегда был свежим.
+    const interval = setInterval(fetchToken, 55 * 1000);
+    
     return () => clearInterval(interval);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [teacherId]);
+    // Добавляем lessonId в массив зависимостей, чтобы при смене пары QR сразу обновился
+  }, [teacherId, lessonId]);
 
   const handleRetry = () => {
     fetchToken();
@@ -49,11 +60,17 @@ const QrGenerator = ({ teacherId }) => {
           </button>
         </div>
       ) : token ? (
-        <QRCodeCanvas value={token} size={250} level="H" includeMargin={true} />
+        <div style={{ background: 'white', padding: '20px', display: 'inline-block', borderRadius: '10px' }}>
+            <QRCodeCanvas value={token} size={250} level="H" includeMargin={true} />
+            <p style={{ marginTop: '10px', color: '#666', fontSize: '14px' }}>
+                Код обновляется автоматически
+            </p>
+        </div>
       ) : (
-        <p>Генерация кода...</p>
+        <p>Генерация кода для пары №{lessonId}...</p>
       )}
     </div>
   );
 };
+
 export default QrGenerator;

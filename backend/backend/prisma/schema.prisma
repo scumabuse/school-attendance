@@ -54,11 +54,15 @@ model Group {
 }
 
 model User {
-  id                String       @id @default(uuid()) @db.Uuid
-  login             String       @unique
-  password          String
-  role              UserRole
-  fullName          String?
+  id       String   @id @default(uuid()) @db.Uuid
+  login    String   @unique
+  password String
+  role     UserRole
+  fullName String?
+
+  // Связь со студентом
+  studentProfile Student?
+
   createdAt         DateTime     @default(now())
   updatedAttendance Attendance[] @relation("UpdatedBy")
   curatedGroups     Group[]      @relation("UserCuratesGroup")
@@ -67,9 +71,14 @@ model User {
 }
 
 model Student {
-  id          String       @id @default(uuid()) @db.Uuid
-  fullName    String
-  groupId     String       @db.Uuid
+  id       String @id @default(uuid()) @db.Uuid
+  fullName String
+  groupId  String @db.Uuid
+
+  // Новое поле для связи с аккаунтом
+  userId String? @unique @db.Uuid
+  user   User?   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   createdAt   DateTime     @default(now())
   attendances Attendance[]
   group       Group        @relation(fields: [groupId], references: [id], onDelete: Cascade)
@@ -79,20 +88,29 @@ model Student {
 }
 
 model Attendance {
-  id          String           @id @default(uuid()) @db.Uuid
-  date        DateTime         @db.Date
+  id   String   @id @default(uuid()) @db.Uuid
+  date DateTime @db.Date
+
+  // 1. Делаем lessonId временнно необязательным (?)
+  lessonId Int?
+  lesson   LessonSchedule? @relation(fields: [lessonId], references: [id])
+
   studentId   String           @db.Uuid
   groupId     String           @db.Uuid
   status      AttendanceStatus
   updatedById String?          @db.Uuid
   updatedAt   DateTime         @updatedAt
-  markedAt    DateTime?        // Time when attendance was marked
-  lateMinutes Int?             // Minutes late (for LATE status)
-  group       Group            @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  student     Student          @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  updatedBy   User?            @relation("UpdatedBy", fields: [updatedById], references: [id])
+  markedAt    DateTime?
+  lateMinutes Int?
 
-  @@unique([studentId, date])
+  // Обратные связи, которые требует Prisma:
+  group     Group   @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  student   Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  updatedBy User?   @relation("UpdatedBy", fields: [updatedById], references: [id])
+
+  // 2. ВРЕМЕННО комментируем уникальность по lessonId, чтобы база не ругалась на пустые поля
+  // @@unique([studentId, date, lessonId]) 
+
   @@index([groupId, date])
   @@index([date])
   @@index([groupId])
@@ -115,10 +133,14 @@ model LessonSchedule {
   id         Int      @id @default(autoincrement())
   dayOfWeek  Int
   pairNumber Int
-  startTime  String   // формат "HH:mm"
-  endTime    String   // формат "HH:mm"
+  startTime  String // формат "HH:mm"
+  endTime    String // формат "HH:mm"
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
+
+  // --- ДОБАВЬ ЭТУ СТРОКУ НИЖЕ ---
+  attendances Attendance[]
+  // ------------------------------
 
   @@unique([dayOfWeek, pairNumber])
   @@map("lesson_schedule")
@@ -141,18 +163,16 @@ enum AttendanceStatus {
   LATE
 }
 
-
 enum QualificationType {
   IT_TECHNICIAN
   WEB_DESIGNER
 }
 
-
 model QrToken {
   id        String   @id @default(uuid()) @db.Uuid
   token     String   @unique
   teacherId String   @db.Uuid // ID преподавателя/заведующей, который генерирует QR код
-  lessonId  Int?     // ID пары, на которую идет отметка (опционально)
+  lessonId  Int? // ID пары, на которую идет отметка (опционально)
   expiresAt DateTime
   createdAt DateTime @default(now())
 
