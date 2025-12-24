@@ -3,6 +3,10 @@ import { API_URL } from '../config';
 import { authHeaders } from '../api/auth';
 import HeadTabs from '../components/HeadTabs';
 import './AnalyticsPage.css';
+import { Pie } from 'react-chartjs-2';
+import { Chart as ChartJS, ArcElement, Tooltip, Legend } from 'chart.js';
+
+ChartJS.register(ArcElement, Tooltip, Legend);
 
 const AnalyticsPage = () => {
   const [stats, setStats] = useState(null);
@@ -13,6 +17,8 @@ const AnalyticsPage = () => {
   const [customEnd, setCustomEnd] = useState('');
   const [showCustomDates, setShowCustomDates] = useState(false);
   const [error, setError] = useState('');
+  const [heads, setHeads] = useState([]); // Заведующие
+  const [headsStats, setHeadsStats] = useState([]); // Статистика по заведующим
 
   useEffect(() => {
     const today = new Date().toISOString().slice(0, 10);
@@ -21,6 +27,20 @@ const AnalyticsPage = () => {
     const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
     setCustomStart(weekAgo);
   }, []);
+
+  const fetchHeads = async () => {
+    try {
+      const res = await fetch(`${API_URL}/users?role=HEAD`, {
+        headers: { ...authHeaders() }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setHeads(data);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
   const fetchStats = async () => {
     try {
@@ -117,6 +137,40 @@ const AnalyticsPage = () => {
     fetchStats();
   }, [period]);
 
+  // 1. Загружаем заведующих (HEAD) только один раз при загрузке страницы
+  useEffect(() => {
+    fetchHeads();
+  }, []); // ← пустой массив = только один раз
+
+  // 2. Рассчитываем статистику по заведующим, когда приходят stats или heads
+  useEffect(() => {
+    if (stats && stats.groups && heads.length > 0) {
+      const headsMap = {};
+      stats.groups.forEach(g => {
+        if (g.curatorId) {
+          if (!headsMap[g.curatorId]) {
+            headsMap[g.curatorId] = { groups: [], percentSum: 0, count: 0 };
+          }
+          headsMap[g.curatorId].groups.push(g);
+          headsMap[g.curatorId].percentSum += g.percent;
+          headsMap[g.curatorId].count += 1;
+        }
+      });
+
+      const headsData = heads.map(h => {
+        const headStats = headsMap[h.id] || { percentSum: 0, count: 0 };
+        return {
+          fullName: h.fullName || h.login, // на случай, если fullName null
+          percent: headStats.count > 0 ? Math.round(headStats.percentSum / headStats.count) : 0,
+          groupsCount: headStats.count
+        };
+      }).filter(h => h.groupsCount > 0);
+
+      setHeadsStats(headsData.sort((a, b) => b.percent - a.percent));
+    } else {
+      setHeadsStats([]);
+    }
+  }, [stats, heads]); // ← зависит только от stats и heads
   // Обновляем аналитику при изменении кастомных дат
   useEffect(() => {
     if (period === 'custom' && customStart && customEnd) {
@@ -394,6 +448,62 @@ const AnalyticsPage = () => {
                 </table>
               </div>
             </div>
+          </section>
+          <section className="heads-histogram">
+            <h2>Посещаемость по заведующим</h2>
+            {headsStats.length === 0 ? (
+              <p style={{ textAlign: 'center', color: '#777', padding: '40px' }}>
+                Нет данных по заведующим
+              </p>
+            ) : (
+              <div style={{ maxWidth: '600px', margin: '0 auto' }}>
+                <Pie
+                  data={{
+                    labels: headsStats.map(h => h.fullName),
+                    datasets: [
+                      {
+                        data: headsStats.map(h => h.percent),
+                        backgroundColor: [
+                          '#10b981', // зелёный
+                          '#f59e0b', // жёлтый
+                          '#ef4444', // красный
+                          '#3b82f6', // синий
+                          '#8b5cf6', // фиолетовый
+                          '#ec4899', // розовый
+                          '#14b8a6', // бирюзовый
+                          '#f97316'  // оранжевый
+                        ],
+                        borderColor: '#fff',
+                        borderWidth: 2,
+                      }
+                    ]
+                  }}
+                  options={{
+                    responsive: true,
+                    plugins: {
+                      legend: {
+                        position: 'bottom',
+                        labels: {
+                          padding: 20,
+                          font: { size: 14 }
+                        }
+                      },
+                      tooltip: {
+                        callbacks: {
+                          label: (context) => {
+                            const head = headsStats[context.dataIndex];
+                            return `${head.fullName}: ${head.percent}% (${head.groupsCount} групп)`;
+                          }
+                        }
+                      }
+                    }
+                  }}
+                />
+                <div style={{ textAlign: 'center', marginTop: '20px', color: '#666' }}>
+                  Всего заведующих: {headsStats.length}
+                </div>
+              </div>
+            )}
           </section>
         </div>
       </div>

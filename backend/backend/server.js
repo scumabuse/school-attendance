@@ -799,6 +799,7 @@ app.get('/api/attendance/stats/summary', authenticate, isHeadOrAdmin, async (req
       select: {
         id: true,
         name: true,
+        curatorId: true,
         _count: { select: { students: true } }
       }
     });
@@ -858,6 +859,7 @@ app.get('/api/attendance/stats/summary', authenticate, isHeadOrAdmin, async (req
         summary.push({
           groupId: group.id,
           groupName: group.name,
+          curatorId: group.curatorId,
           percent: Math.round(stats.percent || 0),
           studentsCount: group._count.students
         });
@@ -1070,6 +1072,34 @@ app.get('/api/practice-days/range', authenticate, isHeadOrAdmin, async (req, res
     res.json(practices);
   } catch (err) {
     console.error(err);
+    res.status(500).json({ error: 'Ошибка сервера' });
+  }
+});
+
+// GET /api/users?role=HEAD — получить пользователей по роли
+app.get('/api/users', authenticate, isHeadOrAdmin, async (req, res) => {
+  try {
+    const { role } = req.query;
+
+    const where = {};
+    if (role) {
+      where.role = role.toUpperCase(); // HEAD, ADMIN и т.д.
+    }
+
+    const users = await prisma.user.findMany({
+      where,
+      select: {
+        id: true,
+        fullName: true,
+        login: true,
+        role: true
+      },
+      orderBy: { fullName: 'asc' }
+    });
+
+    res.json(users);
+  } catch (err) {
+    console.error('Ошибка получения пользователей:', err);
     res.status(500).json({ error: 'Ошибка сервера' });
   }
 });

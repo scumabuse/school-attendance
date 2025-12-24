@@ -415,6 +415,26 @@
   font-weight: 600;
 }
 
+.bars-list {
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.heads-histogram {
+  margin-top: 40px;
+  padding: 20px;
+  background: white;
+  border-radius: 16px;
+  box-shadow: 0 8px 25px rgba(0,0,0,0.1);
+  text-align: center;
+}
+
+.heads-histogram h2 {
+  margin-bottom: 20px;
+  font-size: 22px;
+  color: #333;
+}
+
 /* Адаптивность */
 @media (max-width: 1024px) {
   .bottom-grid {
