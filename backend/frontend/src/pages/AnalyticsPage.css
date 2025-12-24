@@ -135,6 +135,7 @@
   font-weight: 500;
 }
 
+/* Лидеры и аутсайдеры */
 .leaders-list, .outsiders-list {
   display: flex;
   flex-direction: column;
@@ -357,6 +358,7 @@
   background: white;
   padding: 16px;
   box-sizing: border-box;
+  overflow-x: hidden;
 }
 
 /* Новый контейнер со скроллом для таблицы */
@@ -368,12 +370,11 @@
   border-radius: 12px;
   background: white;
   box-sizing: border-box;
-  overflow-x: hidden;
 }
 
 .table-wrapper {
   width: 100%;
-  min-width: unset; /* чтобы таблица не сжималась слишком сильно на десктопе */
+  min-width: 600px; /* чтобы таблица не сжималась слишком сильно на десктопе */
 }
 
 /* Красивый скроллбар для таблицы тоже */
@@ -441,6 +442,7 @@
   max-height: 400px;
   overflow-y: auto;
 }
+
 
 .heads-histogram {
   margin-top: 40px;

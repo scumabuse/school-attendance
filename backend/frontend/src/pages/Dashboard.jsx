@@ -9,7 +9,6 @@ import QrButton from "../components/QR/QRbutton";
 import ConfirmModal from "../components/ConfirmModal";
 import { useLocation } from "react-router-dom";
 import { useRef } from "react";
-import QrButton from "../components/QR/QRbutton";
 
 const TeacherDashboard = () => {
   const [groups, setGroups] = useState([]);
@@ -26,8 +25,6 @@ const TeacherDashboard = () => {
   const location = useLocation();
   const pendingScrollGroupRef = useRef(null);
   const pendingScrollPosRef = useRef(null);
-
-
 
 
   // Загрузка данных
@@ -122,28 +119,13 @@ const TeacherDashboard = () => {
           groupsList.forEach((g) => {
             const s = g.stats;
             if (!s) {
-              g.attendancePercent = 0; // если нет stats — 0%
+              g.attendancePercent = null;
               return;
             }
-<<<<<<< HEAD
-            const markedCount = s.marked || 0;
-=======
             // Базовые присутствующие (без LATE)
->>>>>>> origin/experiment-features
             const presentCount =
               (s.present || 0) +
               (s.wsk || 0) +
-<<<<<<< HEAD
-              (s.dual || 0) +
-              (s.late || 0);
-            const totalCount = presentCount + (s.absent || 0);
-
-            g.attendancePercent = markedCount === 0
-              ? 0  // никто не отмечен — 0%
-              : totalCount > 0
-                ? Math.round((presentCount / totalCount) * 100)
-                : 100;
-=======
               (s.dual || 0);
             // VALID_ABSENT (По приказу) повышает процент: добавляем бонус 0.2 за каждого
             const validBonus = (s.valid || 0) * 0.2;
@@ -157,7 +139,6 @@ const TeacherDashboard = () => {
               const percentWithBonus = ((presentCount + (s.valid || 0) + validBonus) / totalCount) * 100;
               g.attendancePercent = Math.min(Math.round(percentWithBonus), 100);
             }
->>>>>>> origin/experiment-features
           });
         }
         const specsList = Array.from(
@@ -432,11 +413,7 @@ const TeacherDashboard = () => {
           )}
         </div>
       </div>
-<<<<<<< HEAD
-      
-=======
 
->>>>>>> origin/experiment-features
       {/* Плавающая кнопка QR для преподавателя/заведующей */}
       {teacher && (teacher.role === 'HEAD' || teacher.role === 'TEACHER') && (
         <QrButton user={teacher} />

@@ -7,7 +7,6 @@ import AnalyticsPage from "./pages/AnalyticsPage";
 import StudentDashboard from "./pages/StudentDashboard";
 import HeadSchedulePage from "./pages/HeadSchedulePage";
 import ProtectedRoute from "./utils/ProtectedRoute";
-import StudentDashboard from "./pages/StudentDashboard";
 import PracticeDaysPage from "./pages/PracticeDaysPage";
 
 function App() {
@@ -49,16 +48,24 @@ function App() {
           }
         />
         <Route
-        path="/student"
-        element={
-          <ProtectedRoute>
-            <StudentDashboard />
-          </ProtectedRoute>
-        }
+          path="/student"
+          element={
+            <ProtectedRoute>
+              <StudentDashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/head/schedule"
+          element={
+            <ProtectedRoute>
+              <HeadSchedulePage />
+            </ProtectedRoute>
+          }
         />
         <Route path="/practice-days" element={<PracticeDaysPage />} />
       </Routes>
-    </BrowserRouter >
+    </BrowserRouter>
   );
 }
 

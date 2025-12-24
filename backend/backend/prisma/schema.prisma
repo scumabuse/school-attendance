@@ -45,7 +45,6 @@ model Group {
   specialty     Specialty    @relation(fields: [specialtyId], references: [id])
   students      Student[]
   practiceDays PracticeDay[]
-  
 
   @@index([admissionYear])
   @@index([course])

@@ -117,6 +117,8 @@ router.get('/log', async (req, res) => {
         lt: endOfDay
       };
 
+      console.log('Запрос логов для даты:', date, 'Диапазон:', startOfDay, 'до', endOfDay);
+
     } else if (startDate || endDate) {
       // Период
       where.date = {};
@@ -614,52 +616,90 @@ router.post('/batch', async (req, res) => {
   }
 });
 
-// 1. Получение нового QR (для преподавателя)
-router.get('/qr/refresh/:teacherId', async (req, res) => {
+
+
+
+
+
+// ЭНДПОИНТ ДЛЯ ГЕНЕРАЦИИ QR КОДА ДЛЯ ПРЕПОДАВАТЕЛЯ
+router.get('/qr/refresh/:teacherId/:pairNumber', async (req, res) => {
   try {
-    const { teacherId } = req.params;
-    const qrData = await qrService.generateToken(teacherId);
-    res.json({ token: qrData.token });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
+    const { teacherId, pairNumber } = req.params;
 
-// 2. Верификация скана (для студента)
-router.post('/qr/verify', async (req, res) => {
-  try {
-    const { token } = req.body;
-    const currentUserId = req.user?.id;
-    if (!currentUserId) return res.status(401).json({ error: "Нет авторизации" });
+    // Определяем текущий день недели
+    // getDay() возвращает: 0 = воскресенье, 1 = понедельник, ..., 6 = суббота
+    // В нашей системе: 1 = понедельник, 5 = пятница
+    const now = new Date();
+    let dayOfWeek = now.getDay();
+    if (dayOfWeek === 0) dayOfWeek = 7; // Воскресенье -> 7 (но обычно не используется)
+    // Остальные: 1-6 остаются как есть (1=пн, 2=вт, ..., 6=сб)
 
-    const check = await qrService.validateToken(token);
-    if (!check.valid) return res.status(400).json({ error: check.message });
+    const pairNum = parseInt(pairNumber);
 
-    // Ищем запись студента. В идеале userId == studentId, но если нет,
-    // пытаемся сопоставить по ФИО.
-    let student = await prisma.student.findUnique({
-      where: { id: currentUserId },
-      select: { id: true, groupId: true }
+    console.log(`[QR] Генерация QR для teacherId=${teacherId}, pairNumber=${pairNum}, dayOfWeek=${dayOfWeek}`);
+
+    // Находим lessonId по дню недели и номеру пары
+    const lesson = await prisma.lessonSchedule.findUnique({
+      where: {
+        dayOfWeek_pairNumber: {
+          dayOfWeek: dayOfWeek,
+          pairNumber: pairNum
+        }
+      }
     });
 
-    if (!student && req.user?.fullName) {
-      student = await prisma.student.findFirst({
-        where: { fullName: req.user.fullName },
-        select: { id: true, groupId: true }
+    if (!lesson) {
+      console.error(`[QR] Расписание не найдено: dayOfWeek=${dayOfWeek}, pairNumber=${pairNum}`);
+      return res.status(404).json({
+        error: `Расписание для пары №${pairNumber} в этот день (${dayOfWeek}) не найдено. Проверьте настройки расписания.`
       });
     }
 
-    if (!student) {
-      return res.status(400).json({ error: "Студент не найден для этого аккаунта" });
+    console.log(`[QR] Найдено расписание: lessonId=${lesson.id}`);
+
+    // Генерируем токен с lessonId из базы
+    const qrData = await qrService.generateToken(teacherId, lesson.id);
+
+    res.json({ token: qrData.token });
+  } catch (error) {
+    console.error('[QR] Ошибка генерации QR токена:', error);
+    res.status(500).json({ error: error.message || 'Ошибка генерации QR кода' });
+  }
+});
+
+// ЭНДПОИНТ ДЛЯ СКАНЕРОВ СТУДЕНТОВ
+router.post('/scan-qr', async (req, res) => {
+  const { token } = req.body;
+  const userId = req.user.id; // ID из JWT токена студента
+
+  try {
+    // 1. Проверяем валидность QR токена
+    const qrData = await qrService.verifyToken(token);
+    if (!qrData) {
+      return res.status(400).json({ message: 'QR-код недействителен или просрочен' });
     }
 
-    const today = new Date();
-    today.setHours(0, 0, 0, 0); // Обнуляем время для соответствия @db.Date
+    // 2. Находим профиль студента по его User ID
+    const student = await prisma.student.findUnique({
+      where: { userId: userId }
+    });
 
-    // Создаем запись или обновляем до PRESENT в карточке группы
-    await prisma.attendance.upsert({
+    if (!student) {
+      return res.status(404).json({ message: 'Профиль студента не найден' });
+    }
+
+    // 3. Создаем отметку (или обновляем, если уже есть)
+    // Используем upsert, так как у нас @@unique([studentId, date, lessonId])
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const attendance = await prisma.attendance.upsert({
       where: {
-        studentId_date: { studentId: student.id, date: today }
+        studentId_date_lessonId: {
+          studentId: student.id,
+          date: today,
+          lessonId: qrData.lessonId
+        }
       },
       update: {
         status: 'PRESENT',
@@ -669,17 +709,21 @@ router.post('/qr/verify', async (req, res) => {
         studentId: student.id,
         groupId: student.groupId,
         date: today,
+        lessonId: qrData.lessonId,
         status: 'PRESENT',
         markedAt: new Date()
       }
     });
 
-    res.json({ success: true, message: "Вы успешно отмечены!" });
-  } catch (e) {
-    res.status(500).json({ error: "Ошибка сервера: " + e.message });
+    res.json({ message: 'Посещаемость отмечена!', attendance });
+
+  } catch (error) {
+    console.error('QR Scan Error:', error);
+    res.status(500).json({ message: 'Ошибка сервера при сканировании' });
   }
 });
 
+module.exports = router;
 module.exports = router;
 
 

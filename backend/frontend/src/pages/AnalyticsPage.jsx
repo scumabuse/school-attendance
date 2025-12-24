@@ -17,30 +17,65 @@ const AnalyticsPage = () => {
   const [customEnd, setCustomEnd] = useState('');
   const [showCustomDates, setShowCustomDates] = useState(false);
   const [error, setError] = useState('');
-  const [heads, setHeads] = useState([]); // Заведующие
-  const [headsStats, setHeadsStats] = useState([]); // Статистика по заведующим
+  const [heads, setHeads] = useState([]);
+  const [headsStats, setHeadsStats] = useState([]);
+  const [chartSortOrder, setChartSortOrder] = useState('desc'); // сортировка баров
+  const [tableSortOrder, setTableSortOrder] = useState('desc'); // сортировка таблицы
 
+  // Установка дефолтных дат (неделя назад → сегодня)
   useEffect(() => {
     const today = new Date().toISOString().slice(0, 10);
     setCustomEnd(today);
-    // По умолчанию начало — неделя назад
     const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
     setCustomStart(weekAgo);
   }, []);
 
-  const fetchHeads = async () => {
-    try {
-      const res = await fetch(`${API_URL}/users?role=HEAD`, {
-        headers: { ...authHeaders() }
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setHeads(data);
+  // Загрузка заведующих один раз
+  useEffect(() => {
+    const fetchHeads = async () => {
+      try {
+        const res = await fetch(`${API_URL}/users?role=HEAD`, {
+          headers: { ...authHeaders() }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setHeads(data);
+        }
+      } catch (err) {
+        console.error(err);
       }
-    } catch (err) {
-      console.error(err);
+    };
+    fetchHeads();
+  }, []);
+
+  // Расчёт статистики по заведующим
+  useEffect(() => {
+    if (stats && stats.groups && heads.length > 0) {
+      const headsMap = {};
+      stats.groups.forEach(g => {
+        if (g.curatorId) {
+          if (!headsMap[g.curatorId]) {
+            headsMap[g.curatorId] = { percentSum: 0, count: 0 };
+          }
+          headsMap[g.curatorId].percentSum += g.percent;
+          headsMap[g.curatorId].count += 1;
+        }
+      });
+
+      const headsData = heads.map(h => {
+        const headStats = headsMap[h.id] || { percentSum: 0, count: 0 };
+        return {
+          fullName: h.fullName || h.login,
+          percent: headStats.count > 0 ? Math.round(headStats.percentSum / headStats.count) : 0,
+          groupsCount: headStats.count
+        };
+      }).filter(h => h.groupsCount > 0);
+
+      setHeadsStats(headsData.sort((a, b) => b.percent - a.percent));
+    } else {
+      setHeadsStats([]);
     }
-  };
+  }, [stats, heads]);
 
   const fetchStats = async () => {
     try {
@@ -64,11 +99,9 @@ const AnalyticsPage = () => {
         headers: { ...authHeaders() }
       });
 
-      if (!res.ok) {
-        throw new Error(`Ошибка ${res.status}`);
-      }
+      if (!res.ok) throw new Error(`Ошибка ${res.status}`);
 
-      const data = await res.json();
+      let data = await res.json();
 
       // ←←← НОВАЯ ФИЛЬТРАЦИЯ: убираем группы на практике (только для "today")
       if (['today', 'week', 'month'].includes(period)) {
@@ -128,59 +161,19 @@ const AnalyticsPage = () => {
     }
   };
 
+  // Первичная загрузка
   useEffect(() => {
     fetchStats();
   }, []);
 
-  // Перезагружаем аналитику при смене периода
+  // Перезагрузка при смене периода или кастомных дат
   useEffect(() => {
     fetchStats();
-  }, [period]);
-
-  // 1. Загружаем заведующих (HEAD) только один раз при загрузке страницы
-  useEffect(() => {
-    fetchHeads();
-  }, []); // ← пустой массив = только один раз
-
-  // 2. Рассчитываем статистику по заведующим, когда приходят stats или heads
-  useEffect(() => {
-    if (stats && stats.groups && heads.length > 0) {
-      const headsMap = {};
-      stats.groups.forEach(g => {
-        if (g.curatorId) {
-          if (!headsMap[g.curatorId]) {
-            headsMap[g.curatorId] = { groups: [], percentSum: 0, count: 0 };
-          }
-          headsMap[g.curatorId].groups.push(g);
-          headsMap[g.curatorId].percentSum += g.percent;
-          headsMap[g.curatorId].count += 1;
-        }
-      });
-
-      const headsData = heads.map(h => {
-        const headStats = headsMap[h.id] || { percentSum: 0, count: 0 };
-        return {
-          fullName: h.fullName || h.login, // на случай, если fullName null
-          percent: headStats.count > 0 ? Math.round(headStats.percentSum / headStats.count) : 0,
-          groupsCount: headStats.count
-        };
-      }).filter(h => h.groupsCount > 0);
-
-      setHeadsStats(headsData.sort((a, b) => b.percent - a.percent));
-    } else {
-      setHeadsStats([]);
-    }
-  }, [stats, heads]); // ← зависит только от stats и heads
-  // Обновляем аналитику при изменении кастомных дат
-  useEffect(() => {
-    if (period === 'custom' && customStart && customEnd) {
-      fetchStats();
-    }
-  }, [customStart, customEnd, period]); // ← зависимости: даты и период
+  }, [period, customStart, customEnd]);
 
   if (loading) return <div className="loading">Загрузка аналитики...</div>;
-  if (!stats) return <div className="error">Данные недоступны</div>;
-  if (!stats.groups || !Array.isArray(stats.groups) || stats.groups.length === 0) {
+  if (error) return <div className="error">{error}</div>;
+  if (!stats || !stats.groups || stats.groups.length === 0) {
     return <div className="error">Нет данных для отображения</div>;
   }
 
@@ -197,7 +190,7 @@ const AnalyticsPage = () => {
         }
         params.append('startDate', customStart);
         params.append('endDate', customEnd);
-        params.append('dateRangeType', 'custom'); // ←←← ВОТ ЭТА СТРОКА КЛЮЧЕВАЯ!
+        params.append('dateRangeType', 'custom');
       } else {
         const mapping = {
           today: 'today',
@@ -211,14 +204,9 @@ const AnalyticsPage = () => {
       }
 
       const url = `${API_URL}/export/attendance?${params.toString()}`;
+      const res = await fetch(url, { headers: { ...authHeaders() } });
 
-      const res = await fetch(url, {
-        headers: { ...authHeaders() }
-      });
-
-      if (!res.ok) {
-        throw new Error('Ошибка сервера при экспорте');
-      }
+      if (!res.ok) throw new Error('Ошибка сервера при экспорте');
 
       const blob = await res.blob();
       const downloadUrl = window.URL.createObjectURL(blob);
@@ -231,14 +219,11 @@ const AnalyticsPage = () => {
       } else {
         filename += `_${period}`;
       }
-      filename += '.xlsx';
-
-      link.download = filename;
+      link.download = `${filename}.xlsx`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
       window.URL.revokeObjectURL(downloadUrl);
-
     } catch (error) {
       console.error('Ошибка экспорта:', error);
       alert('Не удалось экспортировать. Проверьте период и попробуйте снова.');
@@ -247,21 +232,19 @@ const AnalyticsPage = () => {
     }
   };
 
-  // Сортируем группы по проценту для каждой секции отдельно
-  const sortedGroupsForChart = [...stats.groups].sort((a, b) => {
-    return chartSortOrder === 'desc' ? b.percent - a.percent : a.percent - b.percent;
-  });
+  // Сортировки
+  const sortedGroupsForChart = [...stats.groups].sort((a, b) =>
+    chartSortOrder === 'desc' ? b.percent - a.percent : a.percent - b.percent
+  );
 
-  const sortedGroupsForTable = [...stats.groups].sort((a, b) => {
-    return tableSortOrder === 'desc' ? b.percent - a.percent : a.percent - b.percent;
-  });
+  const sortedGroupsForTable = [...stats.groups].sort((a, b) =>
+    tableSortOrder === 'desc' ? b.percent - a.percent : a.percent - b.percent
+  );
+
+  const leaders = [...stats.groups].sort((a, b) => b.percent - a.percent).slice(0, 3);
+  const outsiders = [...stats.groups].sort((a, b) => a.percent - b.percent).slice(0, 3).reverse();
 
   const maxPercent = Math.max(...stats.groups.map(g => g.percent), 100);
-  
-  // Топ 3 лучших групп (лидеры) - всегда по убыванию
-  const leaders = [...stats.groups].sort((a, b) => b.percent - a.percent).slice(0, 3);
-  // Топ 3 худших групп (аутсайдеры) - всегда по возрастанию, берем первые 3
-  const outsiders = [...stats.groups].sort((a, b) => a.percent - b.percent).slice(0, 3).reverse();
 
   return (
     <HeadTabs>
@@ -272,9 +255,7 @@ const AnalyticsPage = () => {
             Период:{' '}
             <strong>
               {period === 'custom'
-                ? (customStart && customEnd
-                  ? `${customStart.replace(/-/g, '.')} → ${customEnd.replace(/-/g, '.')}`
-                  : 'Выберите даты')
+                ? `${customStart.replace(/-/g, '.')} → ${customEnd.replace(/-/g, '.')}`
                 : {
                   academic_year: 'Учебный год',
                   semester1: '1 семестр',
@@ -282,8 +263,7 @@ const AnalyticsPage = () => {
                   month: 'Текущий месяц',
                   week: 'Текущая неделя',
                   today: 'Текущий день'
-                }[period] || 'Учебный год'
-              }
+                }[period]}
             </strong>
           </p>
           <div className="analytics-actions">
@@ -294,13 +274,10 @@ const AnalyticsPage = () => {
                   const newPeriod = e.target.value;
                   setPeriod(newPeriod);
                   setShowCustomDates(newPeriod === 'custom');
-
-                  // ←←← ВАЖНО: очищаем даты, если перешли с кастомного на другой период
                   if (newPeriod !== 'custom') {
                     setCustomStart('');
                     setCustomEnd('');
                   } else {
-                    // При выборе кастомного — устанавливаем текущую неделю по умолчанию
                     const today = new Date().toISOString().slice(0, 10);
                     const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
                     setCustomStart(weekAgo);
@@ -347,8 +324,7 @@ const AnalyticsPage = () => {
           </div>
         </div>
 
-        {/* Сводные карточки — НЕ МЕНЯЕМ */}
-        {/* Сводные карточки как у друга */}
+        {/* Сводные карточки */}
         <div className="summary-grid">
           <div className="summary-item">
             <div className="summary-label">Средняя посещаемость</div>
@@ -360,7 +336,7 @@ const AnalyticsPage = () => {
           <div className="summary-item leaders-item">
             <div className="summary-label-lider">Лидеры</div>
             <div className="leaders-list">
-              {stats.groups.slice(0, 3).map((group, index) => (
+              {leaders.map((group, index) => (
                 <div key={group.groupId} className="leader-item">
                   <span className="leader-rank">#{index + 1}</span>
                   <span className="leader-name">{group.groupName}</span>
@@ -373,7 +349,7 @@ const AnalyticsPage = () => {
           <div className="summary-item outsiders-item">
             <div className="summary-labe-loser">Аутсайдеры</div>
             <div className="outsiders-list">
-              {stats.groups.slice(-3).reverse().map((group, index) => (
+              {outsiders.map((group, index) => (
                 <div key={group.groupId} className="outsider-item">
                   <span className="outsider-rank">#{stats.groups.length - index}</span>
                   <span className="outsider-name">{group.groupName}</span>
@@ -384,23 +360,16 @@ const AnalyticsPage = () => {
           </div>
         </div>
 
-        {/* НОВАЯ ДВУХКОЛОНОЧНАЯ СЕКЦИЯ */}
+        {/* Нижняя часть */}
         <div className="bottom-grid">
-          {/* Левая колонка — бар-чарт */}
+          {/* Бар-чарт */}
           <section className="chart-section">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
               <h2>Посещаемость по группам</h2>
               <select
                 value={chartSortOrder}
                 onChange={(e) => setChartSortOrder(e.target.value)}
-                style={{
-                  padding: '8px 12px',
-                  border: '1px solid #ddd',
-                  borderRadius: '6px',
-                  fontSize: '14px',
-                  cursor: 'pointer',
-                  backgroundColor: 'white'
-                }}
+                style={{ padding: '8px 12px', border: '1px solid #ddd', borderRadius: '6px', fontSize: '14px', cursor: 'pointer', backgroundColor: 'white' }}
               >
                 <option value="desc">По убыванию</option>
                 <option value="asc">По возрастанию</option>
@@ -440,21 +409,14 @@ const AnalyticsPage = () => {
             </div>
           </section>
 
-          {/* Правая колонка — таблица */}
+          {/* Таблица */}
           <section className="table-section">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
               <h2>Детальная статистика</h2>
               <select
                 value={tableSortOrder}
                 onChange={(e) => setTableSortOrder(e.target.value)}
-                style={{
-                  padding: '8px 12px',
-                  border: '1px solid #ddd',
-                  borderRadius: '6px',
-                  fontSize: '14px',
-                  cursor: 'pointer',
-                  backgroundColor: 'white'
-                }}
+                style={{ padding: '8px 12px', border: '1px solid #ddd', borderRadius: '6px', fontSize: '14px', cursor: 'pointer', backgroundColor: 'white' }}
               >
                 <option value="desc">По убыванию</option>
                 <option value="asc">По возрастанию</option>
@@ -497,6 +459,8 @@ const AnalyticsPage = () => {
               </div>
             </div>
           </section>
+
+          {/* Диаграмма по заведующим */}
           <section className="heads-histogram">
             <h2>Посещаемость по заведующим</h2>
             {headsStats.length === 0 ? (
@@ -508,34 +472,17 @@ const AnalyticsPage = () => {
                 <Pie
                   data={{
                     labels: headsStats.map(h => h.fullName),
-                    datasets: [
-                      {
-                        data: headsStats.map(h => h.percent),
-                        backgroundColor: [
-                          '#10b981', // зелёный
-                          '#f59e0b', // жёлтый
-                          '#ef4444', // красный
-                          '#3b82f6', // синий
-                          '#8b5cf6', // фиолетовый
-                          '#ec4899', // розовый
-                          '#14b8a6', // бирюзовый
-                          '#f97316'  // оранжевый
-                        ],
-                        borderColor: '#fff',
-                        borderWidth: 2,
-                      }
-                    ]
+                    datasets: [{
+                      data: headsStats.map(h => h.percent),
+                      backgroundColor: ['#10b981', '#f59e0b', '#ef4444', '#3b82f6', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316'],
+                      borderColor: '#fff',
+                      borderWidth: 2,
+                    }]
                   }}
                   options={{
                     responsive: true,
                     plugins: {
-                      legend: {
-                        position: 'bottom',
-                        labels: {
-                          padding: 20,
-                          font: { size: 14 }
-                        }
-                      },
+                      legend: { position: 'bottom', labels: { padding: 20, font: { size: 14 } } },
                       tooltip: {
                         callbacks: {
                           label: (context) => {
