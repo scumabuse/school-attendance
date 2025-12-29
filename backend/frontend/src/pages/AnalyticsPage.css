@@ -358,7 +358,6 @@
   background: white;
   padding: 16px;
   box-sizing: border-box;
-  overflow-x: hidden;
 }
 
 /* Новый контейнер со скроллом для таблицы */
@@ -370,6 +369,7 @@
   border-radius: 12px;
   background: white;
   box-sizing: border-box;
+  overflow-x: hidden;
 }
 
 .table-wrapper {
@@ -407,56 +407,6 @@
   background: #f8fafc;
   z-index: 1;
   border-bottom: 1px solid #e2e8f0;
-}
-
-.period-selector {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.custom-dates {
-  display: flex;
-  align-items: center;
-  margin-top: 8px;
-}
-
-.custom-dates input[type="date"] {
-  padding: 8px;
-  border-radius: 6px;
-  border: 1px solid #ccc;
-}
-
-.period-subtitle {
-  margin: 8px 0 16px 0;
-  font-size: 16px;
-  color: #555;
-}
-
-.period-subtitle strong {
-  color: #1976d2;
-  font-weight: 600;
-}
-
-.bars-list {
-  max-height: 400px;
-  overflow-y: auto;
-}
-
-
-.heads-histogram {
-  margin-top: 40px;
-  padding: 20px;
-  background: white;
-  border-radius: 16px;
-  box-shadow: 0 8px 25px rgba(0,0,0,0.1);
-  text-align: center;
-}
-
-.heads-histogram h2 {
-  margin-bottom: 20px;
-  font-size: 22px;
-  color: #333;
 }
 
 /* Адаптивность */

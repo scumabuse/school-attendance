@@ -21,33 +21,28 @@ const GroupStudentsPage = () => {
   const [exportPeriod, setExportPeriod] = useState("week");
   const [exporting, setExporting] = useState(false);
   const [user, setUser] = useState(null);
+  const [schedule, setSchedule] = useState([]);
+  const [currentPair, setCurrentPair] = useState(null);
+  const prevPairRef = useRef(null);
+  const [openOrderDropdown, setOpenOrderDropdown] = useState({});
   const [customStart, setCustomStart] = useState('');
   const [customEnd, setCustomEnd] = useState('');
   const [showCustomDates, setShowCustomDates] = useState(false);
   const [isPractice, setIsPractice] = useState(false);
   const [practiceReason, setPracticeReason] = useState("");
-  const [schedule, setSchedule] = useState([]);
-  const prevPairRef = React.useRef(null);
-  const [currentPair, setCurrentPair] = useState(null);
 
   const today = new Date().toISOString().slice(0, 10);
 
   const fetchSchedule = async () => {
-    if (!id) return;
     try {
-      const res = await fetch(`${API_URL}/schedule?groupId=${id}`, {
+      const res = await fetch(`${API_URL}/schedule`, {
         headers: { ...authHeaders() },
       });
-      if (res.ok) {
-        const data = await res.json();
-        setSchedule(data);
-      } else {
-        console.error("Не удалось загрузить расписание");
-        setSchedule([]);
-      }
+      if (!res.ok) throw new Error("Не удалось загрузить расписание");
+      const data = await res.json();
+      setSchedule(data);
     } catch (err) {
       console.error("Ошибка загрузки расписания:", err);
-      setSchedule([]);
     }
   };
 
@@ -161,6 +156,13 @@ const GroupStudentsPage = () => {
   };
 
   useEffect(() => {
+    const today = new Date().toISOString().slice(0, 10);
+    setCustomEnd(today);
+    const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    setCustomStart(weekAgo);
+  }, []);
+
+  useEffect(() => {
     setUser(getUser());
     if (id) fetchData();
     fetchSchedule();
@@ -225,24 +227,6 @@ const GroupStudentsPage = () => {
     return () => clearInterval(interval);
   }, [students, schedule, lateTimers]);
 
-  useEffect(() => {
-    const today = new Date().toISOString().slice(0, 10);
-    setCustomEnd(today);
-    const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-    setCustomStart(weekAgo);
-  }, []);
-
-  useEffect(() => {
-    setUser(getUser());
-    if (id) fetchData();
-    // При размонтировании страницы — очищаем все таймеры
-    return () => {
-      Object.values(lateTimers).forEach((timerId) => {
-        clearInterval(timerId);
-      });
-    };
-  }, [id]);
-
   const toggleStatus = async (studentId, status) => {
     // Проверка на выходной/праздник
     if (isWeekendOrHoliday) {
@@ -253,68 +237,28 @@ const GroupStudentsPage = () => {
 
     const currentStatus = statuses[studentId] || "none";
 
-    if (status === "LATE") {
-      if (currentStatus === "LATE") {
-        // Если уже LATE, останавливаем таймер (второй клик)
-        if (lateTimers[studentId]) {
-          clearInterval(lateTimers[studentId]);
-          setLateTimers((prev) => {
-            const copy = { ...prev };
-            delete copy[studentId];
-            return copy;
-          });
-        }
-        // Не меняем статус, оставляем LATE с зафиксированным временем
-      } else {
-        // Первый клик: устанавливаем LATE и запускаем таймер
-        setStatuses((prev) => ({
-          ...prev,
-          [studentId]: "LATE",
-        }));
+    // Для всех статусов, включая LATE: обычное переключение (без таймера)
+    const newStatus = currentStatus === status ? "none" : status;
 
-        // Сразу выставляем 0 секунд
-        setLateMinutes((prev) => ({
-          ...prev,
-          [studentId]: 0,
-        }));
-
-        const timerId = setInterval(() => {
-          setLateMinutes((prev) => ({
-            ...prev,
-            // увеличиваем счётчик в секундах
-            [studentId]: (prev[studentId] || 0) + 1,
-          }));
-        }, 1000); // шаг таймера — 1 секунда
-
-        setLateTimers((prev) => ({
-          ...prev,
-          [studentId]: timerId,
-        }));
-      }
-    } else {
-      // Для других статусов: обычное переключение
-      const newStatus = currentStatus === status ? "none" : status;
-
-      // Если до этого был статус LATE — останавливаем таймер и сбрасываем минуты
-      if (currentStatus === "LATE" && lateTimers[studentId]) {
-        clearInterval(lateTimers[studentId]);
-        setLateTimers((prev) => {
-          const copy = { ...prev };
-          delete copy[studentId];
-          return copy;
-        });
-        setLateMinutes((prev) => {
-          const copy = { ...prev };
-          delete copy[studentId];
-          return copy;
-        });
-      }
-
-      setStatuses((prev) => ({
-        ...prev,
-        [studentId]: newStatus,
-      }));
+    // Если до этого был статус LATE — останавливаем таймер и сбрасываем минуты
+    if (currentStatus === "LATE" && lateTimers[studentId]) {
+      clearInterval(lateTimers[studentId]);
+      setLateTimers((prev) => {
+        const copy = { ...prev };
+        delete copy[studentId];
+        return copy;
+      });
+      setLateMinutes((prev) => {
+        const copy = { ...prev };
+        delete copy[studentId];
+        return copy;
+      });
     }
+
+    setStatuses((prev) => ({
+      ...prev,
+      [studentId]: newStatus,
+    }));
   };
 
   const counts = students.reduce(
@@ -353,12 +297,7 @@ const GroupStudentsPage = () => {
           status,
         };
 
-        // Для LATE добавляем lateMinutes (в минутах) и markedAt
-        if (status === "LATE") {
-          const totalSeconds = lateMinutes[sid] || 0;
-          record.lateMinutes = Math.floor(totalSeconds / 60); // Переводим секунды в минуты
-          record.markedAt = new Date().toISOString();
-        }
+        // LATE больше не использует таймер, поэтому lateMinutes не нужен
 
         return record;
       });
@@ -526,7 +465,6 @@ const GroupStudentsPage = () => {
                 </div>
               )}
             </div>
-
             <button
               className="export-group-btn"
               onClick={handleExportGroup}
@@ -539,12 +477,12 @@ const GroupStudentsPage = () => {
 
         {isWeekendOrHoliday && (
           <div className="warning-banner">
-            {blockReason} — отметка посещаемости недоступна
+            ⚠️ {blockReason} — отметка посещаемости недоступна
           </div>
         )}
         {isPractice && (
           <div className="warning-banner practice-banner">
-            Сегодня {practiceReason} — отметка посещаемости недоступна
+            У группы {practiceReason} — отметка посещаемости недоступна
           </div>
         )}
 
@@ -564,13 +502,6 @@ const GroupStudentsPage = () => {
                     Присутствует
                   </button>
                   <button
-                    className={`status-btn absent ${currentStatus === "ABSENT" ? "active" : ""}`}
-                    onClick={() => toggleStatus(student.id, "ABSENT")}
-                    disabled={isPractice || isWeekendOrHoliday}
-                  >
-                    Отсутствует
-                  </button>
-                  <button
                     className={`status-btn sick ${currentStatus === "SICK" ? "active" : ""}`}
                     onClick={() => toggleStatus(student.id, "SICK")}
                     disabled={isPractice || isWeekendOrHoliday}
@@ -578,11 +509,11 @@ const GroupStudentsPage = () => {
                     Больничный
                   </button>
                   <button
-                    className={`status-btn valid ${currentStatus === "VALID_ABSENT" ? "active" : ""}`}
-                    onClick={() => toggleStatus(student.id, "VALID_ABSENT")}
+                    className={`status-btn dual ${currentStatus === "DUAL" ? "active" : ""}`}
+                    onClick={() => toggleStatus(student.id, "DUAL")}
                     disabled={isPractice || isWeekendOrHoliday}
                   >
-                    Уважительная
+                    Дуальное обучение
                   </button>
                   <button
                     className={`status-btn wsk ${currentStatus === "ITHUB" ? "active" : ""}`}
@@ -591,27 +522,49 @@ const GroupStudentsPage = () => {
                   >
                     IT HUB
                   </button>
+                  <div className="status-dropdown-container">
+                    <button
+                      className={`status-btn dropdown-btn ${currentStatus === "VALID_ABSENT" || currentStatus === "LATE" ? "active" : ""}`}
+                      onClick={() => setOpenOrderDropdown(prev => ({
+                        ...prev,
+                        [student.id]: !prev[student.id]
+                      }))}
+                      disabled={isPractice || isWeekendOrHoliday}
+                    >
+                      {currentStatus === "VALID_ABSENT" ? "По приказу" : currentStatus === "LATE" ? "По заявлению" : "Ув. Причина"}
+                      <span className="dropdown-arrow-btn">▼</span>
+                    </button>
+                    {openOrderDropdown[student.id] && (
+                      <div className="status-dropdown-menu">
+                        <button
+                          className={`status-dropdown-item ${currentStatus === "VALID_ABSENT" ? "active" : ""}`}
+                          onClick={() => {
+                            toggleStatus(student.id, "VALID_ABSENT");
+                            setOpenOrderDropdown(prev => ({ ...prev, [student.id]: false }));
+                          }}
+                          disabled={isPractice || isWeekendOrHoliday}
+                        >
+                          По приказу
+                        </button>
+                        <button
+                          className={`status-dropdown-item ${currentStatus === "LATE" ? "active" : ""}`}
+                          onClick={() => {
+                            toggleStatus(student.id, "LATE");
+                            setOpenOrderDropdown(prev => ({ ...prev, [student.id]: false }));
+                          }}
+                          disabled={isPractice || isWeekendOrHoliday}
+                        >
+                          По заявлению
+                        </button>
+                      </div>
+                    )}
+                  </div>
                   <button
-                    className={`status-btn dual ${currentStatus === "DUAL" ? "active" : ""}`}
-                    onClick={() => toggleStatus(student.id, "DUAL")}
+                    className={`status-btn absent ${currentStatus === "ABSENT" ? "active" : ""}`}
+                    onClick={() => toggleStatus(student.id, "ABSENT")}
                     disabled={isPractice || isWeekendOrHoliday}
                   >
-                    Д
-                  </button>
-                  <button
-                    className={`status-btn late ${currentStatus === "LATE" ? "active" : ""}`}
-                    onClick={() => toggleStatus(student.id, "LATE")}
-                    disabled={isPractice || isWeekendOrHoliday}
-                  >
-                    {currentStatus === "LATE" && lateMinutes[student.id] !== undefined
-                      ? (() => {
-                        const totalSeconds = lateMinutes[student.id] || 0;
-                        const mins = Math.floor(totalSeconds / 60);
-                        const secs = totalSeconds % 60;
-                        const secsStr = secs.toString().padStart(2, "0");
-                        return `ОП (${mins}:${secsStr})`;
-                      })()
-                      : "ОП"}
+                    Без причины
                   </button>
                 </div>
               </div>
@@ -623,12 +576,12 @@ const GroupStudentsPage = () => {
         <div className="bottom-bar">
           <div className="stats-summary">
             <span className="stat-item present">Присутствует {counts.present}</span>
-            <span className="stat-item absent">Отсутствует {counts.absent}</span>
-            <span className="stat-item valid">Уважительная {counts.valid}</span>
             <span className="stat-item sick">Больничный {counts.sick}</span>
+            <span className="stat-item dual">Дуальное обучение {counts.dual}</span>
             <span className="stat-item wsk">IT HUB {counts.wsk}</span>
-            <span className="stat-item dual">Дуальное {counts.dual}</span>
-            <span className="stat-item late">Опоздание {counts.late}</span>
+            <span className="stat-item valid">По приказу {counts.valid}</span>
+            <span className="stat-item late">По заявлению {counts.late}</span>
+            <span className="stat-item absent">Без причины {counts.absent}</span>
             <span className="stat-item unmarked">Не отмечено {counts.none}</span>
           </div>
 
@@ -799,6 +752,92 @@ const GroupStudentsPage = () => {
         .status-btn:disabled {
           opacity: 0.5;
           cursor: not-allowed;
+        }
+        
+        .warning-banner {
+          background: #fff3cd;
+          border: 1px solid #ffc107;
+          color: #856404;
+          padding: 12px 16px;
+          border-radius: 8px;
+          margin-bottom: 20px;
+          font-weight: 500;
+        }
+          
+
+        .status-dropdown-container {
+          position: relative;
+          display: inline-block;
+        }
+
+        .dropdown-btn {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+        }
+
+        .dropdown-arrow-btn {
+          font-size: 10px;
+          transition: transform 0.2s ease;
+        }
+
+        .status-dropdown-menu {
+          position: absolute;
+          top: 100%;
+          left: 0;
+          margin-top: 4px;
+          background: white;
+          border: 1px solid #ddd;
+          border-radius: 8px;
+          box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+          z-index: 1000;
+          min-width: 150px;
+          overflow: hidden;
+          animation: slideDown 0.2s ease;
+        }
+
+        @keyframes slideDown {
+          from {
+            opacity: 0;
+            transform: translateY(-5px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+
+        .status-dropdown-item {
+          display: block;
+          width: 100%;
+          padding: 10px 14px;
+          border: none;
+          background: white;
+          text-align: left;
+          font-size: 13.5px;
+          font-weight: 500;
+          cursor: pointer;
+          transition: background 0.2s;
+          border-radius: 0;
+        }
+
+        .status-dropdown-item:hover {
+          background: #f5f5f5;
+        }
+
+        .status-dropdown-item.active {
+          background: #ffe0b2;
+          color: #e65100;
+        }
+
+        .status-dropdown-item:first-child {
+          border-top-left-radius: 8px;
+          border-top-right-radius: 8px;
+        }
+
+        .status-dropdown-item:last-child {
+          border-bottom-left-radius: 8px;
+          border-bottom-right-radius: 8px;
         }
 
         .warning-banner {

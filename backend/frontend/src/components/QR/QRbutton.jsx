@@ -3,10 +3,6 @@ import QrGenerator from './QRgenerator';
 
 const QrButton = ({ user }) => {
   const [isOpen, setIsOpen] = useState(false);
-  // Добавляем состояние для выбора пары (по умолчанию 1-я)
-  const [selectedLesson, setSelectedLesson] = useState(1);
-
-  const lessons = [1, 2, 3, 4, 5, 6]; // Список номеров пар
 
   return (
     <>
@@ -24,24 +20,10 @@ const QrButton = ({ user }) => {
             
             <h3 style={{ textAlign: 'center', marginBottom: '10px' }}>Генерация QR-кода</h3>
             
-            {/* Селектор выбора пары */}
-            <div style={{ marginBottom: '20px', textAlign: 'center' }}>
-              <label style={{ marginRight: '10px' }}>Выберите пару:</label>
-              <select 
-                value={selectedLesson} 
-                onChange={(e) => setSelectedLesson(parseInt(e.target.value))}
-                style={{ padding: '5px', borderRadius: '5px' }}
-              >
-                {lessons.map(num => (
-                  <option key={num} value={num}>Пара №{num}</option>
-                ))}
-              </select>
-            </div>
-
-            <QrGenerator teacherId={user.id} lessonId={selectedLesson} />
+            <QrGenerator teacherId={user.id} />
             
             <p style={{ textAlign: 'center', marginTop: '15px', fontSize: '12px', color: '#666' }}>
-              Студенты отметятся на пару №{selectedLesson}
+              QR-код автоматически определит текущую пару по расписанию
             </p>
           </div>
         </div>

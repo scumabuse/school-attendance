@@ -14,7 +14,7 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background-image: url("../assets/logo2.png"); /* Тот же путь */
+  background-image: url("../assets/logo.png"); /* Тот же путь */
   background-repeat: no-repeat;
   background-position: center center;
   background-size: 60% auto; /* Или 500px auto — фиксированный размер */
@@ -71,13 +71,6 @@
   font-size: 14px;
 }
 
-@media (max-width: 768px) {
-  .login-container::before {
-    background-size: 80% auto; /* логотип больше, но вписывается */
-    opacity: 0.12;            /* чуть менее заметный */
-  }
-}
-
 /* Адаптивность для телефонов */
 @media (max-width: 480px) {
   .login-container {
@@ -103,12 +96,6 @@
     font-size: 16px;
   }
 }
-
-.login-container::before {
-    background-size: 50% auto;   /* почти на всю ширину */
-    background-position: center 16%; /* чуть выше центра */
-    opacity: 0.1;
-  }
 
 /* Очень маленькие экраны */
 @media (max-width: 360px) {

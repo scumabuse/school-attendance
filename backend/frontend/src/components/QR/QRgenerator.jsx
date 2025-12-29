@@ -4,28 +4,31 @@ import axios from 'axios';
 import { API_URL } from '../../config';
 import { authHeaders } from '../../api/auth';
 
-// Добавляем lessonId в пропсы
-const QrGenerator = ({ teacherId, lessonId }) => {
+const QrGenerator = ({ teacherId }) => {
   const [token, setToken] = useState('');
   const [error, setError] = useState('');
+  const [currentLessonId, setCurrentLessonId] = useState(null);
 
   const fetchToken = async () => {
-    // Если нет ID учителя или пары, не делаем запрос
-    if (!teacherId || !lessonId) {
-        setError('Не выбран преподаватель или учебное занятие');
+    // Если нет ID учителя, не делаем запрос
+    if (!teacherId) {
+        setError('Не выбран преподаватель');
         return;
     }
 
     try {
       setError('');
-      // Обновленный URL: добавляем lessonId в конец
+      // Новый URL: без lessonId, пару определяет сервер автоматически
       const res = await axios.get(
-        `${API_URL}/attendance/qr/refresh/${teacherId}/${lessonId}`,
+        `${API_URL}/attendance/qr/refresh/${teacherId}`,
         { headers: { ...authHeaders() } }
       );
       
       if (res.data && res.data.token) {
         setToken(res.data.token);
+        if (res.data.lessonId) {
+          setCurrentLessonId(res.data.lessonId);
+        }
       } else {
         setError('Не удалось получить токен');
       }
@@ -40,11 +43,11 @@ const QrGenerator = ({ teacherId, lessonId }) => {
 
     // ВАЖНО: Токен в новой логике живет 1 минуту (60000 мс).
     // Обновляем его каждые 55 секунд, чтобы QR всегда был свежим.
+    // При обновлении автоматически определяется текущая пара.
     const interval = setInterval(fetchToken, 55 * 1000);
     
     return () => clearInterval(interval);
-    // Добавляем lessonId в массив зависимостей, чтобы при смене пары QR сразу обновился
-  }, [teacherId, lessonId]);
+  }, [teacherId]);
 
   const handleRetry = () => {
     fetchToken();
@@ -65,9 +68,14 @@ const QrGenerator = ({ teacherId, lessonId }) => {
             <p style={{ marginTop: '10px', color: '#666', fontSize: '14px' }}>
                 Код обновляется автоматически
             </p>
+            {currentLessonId && (
+              <p style={{ marginTop: '5px', color: '#666', fontSize: '12px' }}>
+                Текущая пара определена автоматически
+              </p>
+            )}
         </div>
       ) : (
-        <p>Генерация кода для пары №{lessonId}...</p>
+        <p>Определение текущей пары и генерация кода...</p>
       )}
     </div>
   );

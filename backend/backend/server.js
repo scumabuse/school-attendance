@@ -129,11 +129,27 @@ function getDateRange(type = 'academic_year', start, end) {
 const { importStudentsFromBuffer } = require('./services/importStudents');
 const { exportAttendanceService } = require('./services/exportAttendance');
 const attendanceRouter = require('./api/routes/attendance');
+const scheduleRouter = require('./api/routes/schedule');
 
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
-app.use('/api/attendance', attendanceRouter);
+// Все маршруты посещаемости требуют авторизации
+app.use('/api/attendance', authenticate, attendanceRouter);
+// Расписание пар (чтение — всем аутентифицированным, изменения — только HEAD/ADMIN)
+app.use(
+  '/api/schedule',
+  authenticate,
+  (req, res, next) => {
+    if (req.method === 'PUT' || (req.method === 'POST' && req.path === '/seed-defaults')) {
+      if (!req.user || !['HEAD', 'ADMIN'].includes(req.user.role)) {
+        return res.status(403).json({ error: 'Доступ запрещён. Только для HEAD и ADMIN' });
+      }
+    }
+    next();
+  },
+  scheduleRouter
+);
 
 // Логи
 morgan.token('body', (req) => Object.keys(req.body).length ? ` Body: ${JSON.stringify(req.body).slice(0, 300)}` : '');
@@ -515,7 +531,6 @@ app.patch('/api/admin/groups/:id', authenticate, isHeadOrAdmin, async (req, res)
   }
 });
 
-// GET /api/groups — получить все группы
 app.get('/api/groups', authenticate, async (req, res) => {
   try {
     const groups = await prisma.group.findMany({
@@ -617,7 +632,8 @@ app.get('/api/attendance', authenticate, async (req, res) => {
     const where = {};
 
     if (groupId) where.groupId = groupId;
-    if (studentId) where.studentId = studentId;
+    if (studentId && studentId !== 'current') where.studentId = studentId;
+    if (studentId === 'current') where.studentId = req.user.id;
 
     if (date) {
       // Конкретная дата — нормализуем её в учебную таймзону
@@ -788,19 +804,36 @@ app.get('/api/attendance/stats/summary', authenticate, isHeadOrAdmin, async (req
   try {
     const { type = 'academic_year', start, end } = req.query;
     const range = getDateRange(type, start, end);
+    // Для "today" — строго только сегодня, без старых данных
+    if (type === 'today') {
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+      const todayEnd = new Date();
+      todayEnd.setHours(23, 59, 59, 999);
 
+      // Переопределяем range только для today
+      range.start = todayStart;
+      range.end = todayEnd;
+    }
+
+    // Получаем праздники за период (только даты)
     const holidays = await prisma.holiday.findMany({
-      where: { date: { gte: range.start, lte: range.end } },
+      where: {
+        date: { gte: range.start, lte: range.end }
+      },
       select: { date: true }
     });
     const holidayDates = holidays.map(h => h.date);
 
+    // Получаем группы с количеством студентов (без загрузки студентов и attendances!)
     const groups = await prisma.group.findMany({
       select: {
         id: true,
         name: true,
         curatorId: true,
-        _count: { select: { students: true } }
+        _count: {
+          select: { students: true }
+        }
       }
     });
 
@@ -808,7 +841,10 @@ app.get('/api/attendance/stats/summary', authenticate, isHeadOrAdmin, async (req
 
     for (const group of groups) {
       let stats;
+
+      // Для today, week, month — считаем как на дашборде (по отмеченным в периоде)
       if (type === 'today') {
+        // Только для "Текущий день" — считаем как на дашборде
         const todayRecords = await prisma.attendance.findMany({
           where: {
             groupId: group.id,
@@ -817,71 +853,76 @@ app.get('/api/attendance/stats/summary', authenticate, isHeadOrAdmin, async (req
           select: { status: true }
         });
 
-        const markedCount = todayRecords.length;
-        const totalStudents = group._count.students;
-
-        let presentCount = 0;
-        let absentCount = 0;
-
-        todayRecords.forEach(r => {
-          if (['PRESENT', 'VALID_ABSENT', 'ITHUB', 'DUAL', 'LATE'].includes(r.status)) {
-            presentCount++;
-          } else if (r.status === 'ABSENT') {
-            absentCount++;
-          }
-        });
-
-        let percent;
-        if (totalStudents === 0) {
-          percent = 100;
-        }else if (markedCount === 0) {
-          percent = 0; // никто не отмечен — 0%
+        if (todayRecords.length === 0) {
+          stats = { percent: 0 };
         } else {
-          const total = presentCount + absentCount;
-          percent = total > 0 ? Math.round((presentCount / total) * 100) : 0;
-        }
+          let presentCount = 0;
+          let absentCount = 0;
 
-          stats = { percent };
-
-        } else {
-          // Для других периодов — обычная логика
-          const records = await prisma.attendance.findMany({
-            where: {
-              groupId: group.id,
-              date: { gte: range.start, lte: range.end }
-            },
-            select: { date: true, status: true }
+          todayRecords.forEach(r => {
+            if (['PRESENT', 'LATE', 'VALID_ABSENT', 'ITHUB', 'DUAL'].includes(r.status)) {
+              presentCount++;
+            } else if (r.status === 'ABSENT') {
+              absentCount++;
+            }
           });
 
-          stats = await calculateAttendance(records, holidayDates, range.start, range.end);
+          const totalMarked = presentCount + absentCount;
+          stats = {
+            percent: totalMarked > 0 ? Math.round((presentCount / totalMarked) * 100) : 0
+          };
         }
-
-        summary.push({
-          groupId: group.id,
-          groupName: group.name,
-          curatorId: group.curatorId,
-          percent: Math.round(stats.percent || 0),
-          studentsCount: group._count.students
+      } else {
+        // Для всех остальных (week, month, семестры, год) — полная статистика
+        const attendanceRecords = await prisma.attendance.findMany({
+          where: {
+            groupId: group.id,
+            date: { gte: range.start, lte: range.end }
+          },
+          select: { date: true, status: true }
         });
+
+        stats = await calculateAttendance(
+          attendanceRecords,
+          holidayDates,
+          range.start,
+          range.end
+        );
       }
 
-      // Добавляем нулевые группы, чтобы не исчезали
-      const sorted = [...summary].sort((a, b) => b.percent - a.percent);
-
-      const avg = sorted.length ? Math.round(sorted.reduce((a, b) => a + b.percent, 0) / sorted.length) : 100;
-
-      res.json({
-        period: type === 'custom' ? `${start} → ${end}` : type,
-        averagePercent: avg,
-        bestGroup: sorted[0] || null,
-        worstGroup: sorted[sorted.length - 1] || null,
-        groups: sorted
+      summary.push({
+        groupId: group.id,
+        groupName: group.name,
+        curatorId: group.curatorId,
+        percent: Math.round(stats.percent || 0),
+        studentsCount: group._count.students
       });
-    } catch (err) {
-      console.error('Ошибка в /stats/summary:', err);
-      res.status(500).json({ error: 'Ошибка сервера' });
     }
-  });
+
+    // Сортировка и расчёт среднего
+    const sorted = [...summary].sort((a, b) => b.percent - a.percent);
+
+    const avg = sorted.length > 0
+      ? Math.round(sorted.reduce((a, b) => a + b.percent, 0) / sorted.length)
+      : 100;
+
+    const bestGroup = sorted[0] || null;
+    const worstGroup = sorted[sorted.length - 1] || null;
+
+    res.json({
+      period: type,
+      averagePercent: avg,
+      bestGroup,
+      worstGroup,
+      groups: sorted
+    });
+
+  } catch (err) {
+    console.error('Ошибка в /stats/summary:', err);
+    res.status(500).json({ error: 'Ошибка при расчёте аналитики' });
+  }
+});
+
 // === СТАТИСТИКА ПО ОДНОМУ СТУДЕНТУ (для страницы "Все студенты") ===
 app.get('/api/attendance/student/:id/percent', authenticate, async (req, res) => {
   try {

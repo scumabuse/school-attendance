@@ -11,7 +11,7 @@ ChartJS.register(ArcElement, Tooltip, Legend);
 const AnalyticsPage = () => {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [period, setPeriod] = useState('academic_year');
+  const [period, setPeriod] = useState('today');
   const [exporting, setExporting] = useState(false);
   const [customStart, setCustomStart] = useState('');
   const [customEnd, setCustomEnd] = useState('');
@@ -103,14 +103,12 @@ const AnalyticsPage = () => {
 
       let data = await res.json();
 
-      // ←←← НОВАЯ ФИЛЬТРАЦИЯ: убираем группы на практике (только для "today")
+      // Фильтрация групп на практике (только для today/week/month)
       if (['today', 'week', 'month'].includes(period)) {
-        // Определяем диапазон дат для периода
         const now = new Date();
         const todayStr = now.toISOString().slice(0, 10);
 
         let startDate, endDate;
-
         if (period === 'today') {
           startDate = endDate = todayStr;
         } else if (period === 'week') {
@@ -124,20 +122,18 @@ const AnalyticsPage = () => {
           endDate = todayStr;
         }
 
-        // Запрашиваем группы, у которых есть практика в этом диапазоне
         const practiceRes = await fetch(
           `${API_URL}/practice-days/range?start=${startDate}&end=${endDate}`,
           { headers: { ...authHeaders() } }
         );
 
         if (practiceRes.ok) {
-          const practiceGroups = await practiceRes.json(); // массив { groupId: '...' }
+          const practiceGroups = await practiceRes.json();
           const practiceSet = new Set(practiceGroups.map(g => g.groupId));
 
-          // Скрываем группы, у которых есть практика в периоде
           data.groups = data.groups.filter(g => !practiceSet.has(g.groupId));
 
-          // Пересчитываем статистику
+          // Пересчёт средней и лучших/худших
           if (data.groups.length > 0) {
             data.averagePercent = Math.round(
               data.groups.reduce((sum, g) => sum + g.percent, 0) / data.groups.length
@@ -286,12 +282,12 @@ const AnalyticsPage = () => {
                 }}
                 className="period-select"
               >
-                <option value="academic_year">Учебный год</option>
+                <option value="today">Текущий день</option>
+                <option value="week">Текущая неделя</option>
+                <option value="month">Текущий месяц</option>
                 <option value="semester1">1 семестр</option>
                 <option value="semester2">2 семестр</option>
-                <option value="month">Текущий месяц</option>
-                <option value="week">Текущая неделя</option>
-                <option value="today">Текущий день</option>
+                <option value="academic_year">Учебный год</option>
                 <option value="custom">Кастомный период ←</option>
               </select>
 
@@ -472,17 +468,34 @@ const AnalyticsPage = () => {
                 <Pie
                   data={{
                     labels: headsStats.map(h => h.fullName),
-                    datasets: [{
-                      data: headsStats.map(h => h.percent),
-                      backgroundColor: ['#10b981', '#f59e0b', '#ef4444', '#3b82f6', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316'],
-                      borderColor: '#fff',
-                      borderWidth: 2,
-                    }]
+                    datasets: [
+                      {
+                        data: headsStats.map(h => h.percent),
+                        backgroundColor: [
+                          '#10b981', // зелёный
+                          '#f59e0b', // жёлтый
+                          '#ef4444', // красный
+                          '#3b82f6', // синий
+                          '#8b5cf6', // фиолетовый
+                          '#ec4899', // розовый
+                          '#14b8a6', // бирюзовый
+                          '#f97316'  // оранжевый
+                        ],
+                        borderColor: '#fff',
+                        borderWidth: 2,
+                      }
+                    ]
                   }}
                   options={{
                     responsive: true,
                     plugins: {
-                      legend: { position: 'bottom', labels: { padding: 20, font: { size: 14 } } },
+                      legend: {
+                        position: 'bottom',
+                        labels: {
+                          padding: 20,
+                          font: { size: 14 }
+                        }
+                      },
                       tooltip: {
                         callbacks: {
                           label: (context) => {
