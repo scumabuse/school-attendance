@@ -8,6 +8,7 @@ import StudentDashboard from "./pages/StudentDashboard";
 import HeadSchedulePage from "./pages/HeadSchedulePage";
 import ProtectedRoute from "./utils/ProtectedRoute";
 import PracticeDaysPage from "./pages/PracticeDaysPage";
+import AdminPanel from './pages/AdminPanel';
 
 function App() {
   return (
@@ -64,6 +65,7 @@ function App() {
           }
         />
         <Route path="/practice-days" element={<PracticeDaysPage />} />
+        <Route path="/admin" element={<AdminPanel />} />
       </Routes>
     </BrowserRouter>
   );

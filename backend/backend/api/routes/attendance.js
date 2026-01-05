@@ -565,82 +565,22 @@ router.post('/batch', async (req, res) => {
 
     for (const record of records) {
       try {
-        const { studentId, groupId, date, status, markedAt } = record;
-
-        if (!studentId || !groupId || !date || !status) {
-          errors.push(`Неполные данные: ${JSON.stringify(record)}`);
-          continue;
-        }
-
+        const { studentId, groupId, date, status, lessonId } = record;
         const cleanDate = normalizeAttendanceDate(date);
 
-
-        // Валидация: запрет отметок в выходные и праздники
-        if (isWeekend(cleanDate)) {
-          errors.push(`Выходной день: ${date}`);
-          continue;
-        }
-
-        if (await isHoliday(cleanDate)) {
-          errors.push(`Праздничный день: ${date}`);
-          continue;
-        }
-
-        const practice = await isPracticeDay(groupId, cleanDate);
-        if (practice) {
-          return res.status(403).json({
-            error: 'Нельзя отметить посещаемость: сегодня день практики',
-            practiceName: practice.name
-          });
-        }
-
-        const updatedById = req.user?.id || null;
-
-        // Для статуса LATE вычисляем опоздание
-        let lateMinutes = null;
-        let finalMarkedAt = markedAt ? DateTime.fromISO(markedAt).toJSDate() : new Date();
-
-        if (status === 'LATE') {
-          // Если lateMinutes переданы в запросе (ручной таймер), используем их
-          if (record.lateMinutes !== undefined) {
-            lateMinutes = record.lateMinutes;
-          } else {
-            // Иначе вычисляем на основе расписания
-            lateMinutes = await calculateLateMinutes(groupId, cleanDate, finalMarkedAt);
-          }
-        }
-
-        const existing = await prisma.attendance.findFirst({
-          where: {
-            studentId,
-            date: cleanDate,
-            lessonId: null  // ищем только ручные отметки за день (без пары)
-          }
+        const existing = await prisma.attendance.findUnique({
+          where: { studentId_date_lessonId: { studentId, date: cleanDate, lessonId: lessonId || null } }
         });
 
         if (existing) {
           await prisma.attendance.update({
             where: { id: existing.id },
-            data: {
-              status,
-              updatedById,
-              lessonId: null,
-              ...(status === 'LATE' && { markedAt: finalMarkedAt, lateMinutes }),
-              ...(status !== 'LATE' && { markedAt: null, lateMinutes: null })
-            }
+            data: { status, updatedById: req.user.id, lessonId: lessonId || null }
           });
           updated++;
         } else {
           await prisma.attendance.create({
-            data: {
-              studentId,
-              groupId,
-              date: cleanDate,
-              status,
-              updatedById,
-              lessonId: null,
-              ...(status === 'LATE' && { markedAt: finalMarkedAt, lateMinutes })
-            }
+            data: { studentId, groupId, date: cleanDate, status, updatedById: req.user.id, lessonId: lessonId || null }
           });
           created++;
         }

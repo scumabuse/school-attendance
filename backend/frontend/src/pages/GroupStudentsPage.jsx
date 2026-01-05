@@ -202,30 +202,36 @@ const GroupStudentsPage = () => {
 
   // Сбрасываем отметки при смене пары
   useEffect(() => {
-    if (!students || students.length === 0 || schedule.length === 0) return;
-    const check = () => {
-      const pair = detectCurrentPair();
-      const prev = prevPairRef.current;
-      if (pair !== prev) {
-        prevPairRef.current = pair;
-        setCurrentPair(pair);
-        // Очистка отметок
-        setStatuses(() => {
-          const next = {};
-          students.forEach((s) => {
-            next[s.id] = "none";
+    if (students.length === 0 || schedule.length === 0) return;
+
+    const checkPair = () => {
+      const newPair = detectCurrentPair();
+      if (newPair !== prevPairRef.current) {
+        console.log('Смена пары:', prevPairRef.current, '→', newPair);
+        prevPairRef.current = newPair;
+        setCurrentPair(newPair);
+
+        // СБРАСЫВАЕМ ВСЕ ОТМЕТКИ
+        setStatuses(prev => {
+          const reset = {};
+          students.forEach(s => {
+            reset[s.id] = "none";
           });
-          return next;
+          return reset;
         });
-        setLateMinutes({});
-        Object.values(lateTimers).forEach((timerId) => clearInterval(timerId));
+
+        // Очищаем таймеры опозданий (если были)
+        Object.values(lateTimers).forEach(clearInterval);
         setLateTimers({});
+        setLateMinutes({});
       }
     };
-    check();
-    const interval = setInterval(check, 30000);
+
+    checkPair(); // проверка сразу
+    const interval = setInterval(checkPair, 30000); // каждые 30 секунд
+
     return () => clearInterval(interval);
-  }, [students, schedule, lateTimers]);
+  }, [students, schedule]); // ← только эти зависимости!
 
   const toggleStatus = async (studentId, status) => {
     // Проверка на выходной/праздник
@@ -281,10 +287,15 @@ const GroupStudentsPage = () => {
   const handleSave = async () => {
     setMessage("");
 
-    // Проверка на выходной/праздник
-    if (isWeekendOrHoliday) {
-      setMessage(`Нельзя сохранить посещаемость: ${blockReason}`);
+    // Проверка на выходной/праздник/практику
+    if (isWeekendOrHoliday || isPractice) {
+      setMessage(`Нельзя сохранить посещаемость: ${blockReason || practiceReason}`);
       setTimeout(() => setMessage(""), 3000);
+      return;
+    }
+
+    if (!currentPair) {
+      setMessage("Нет текущей пары — отметка недоступна");
       return;
     }
 
@@ -296,10 +307,10 @@ const GroupStudentsPage = () => {
           groupId: id,
           date: today,
           status,
+          lessonId: currentPair  // ←←← ДОБАВЬ ЭТУ СТРОКУ
         };
 
-        // LATE больше не использует таймер, поэтому lateMinutes не нужен
-
+        // Для LATE, если нужно (но у тебя таймер выключен)
         return record;
       });
 
@@ -322,23 +333,15 @@ const GroupStudentsPage = () => {
 
       if (response.ok) {
         const result = await response.json();
-        console.log("ОТВЕТ СЕРВЕРА:", result);
         setMessage("Посещаемость сохранена!");
-        fetchData(); // обновляем текущую страницу (загрузит lateMinutes с сервера)
-
-        // ← ГЛАВНОЕ — ОПОВЕЩАЕМ ДАШБОРД!
+        fetchData(); // обновляем
         window.dispatchEvent(new Event("attendanceSaved"));
         navigate("/dashboard", { state: { scrollToGroupId: id } });
       } else {
-        const err = await response.json().catch(() => ({}));
+        const err = await response.json();
         setMessage(err.error || "Ошибка сохранения");
-        if (err.error && (err.error.includes("выходной") || err.error.includes("праздничный"))) {
-          setIsWeekendOrHoliday(true);
-          setBlockReason(err.error);
-        }
       }
     } catch (err) {
-      console.error(err);
       setMessage("Нет соединения с сервером");
     } finally {
       setSaving(false);
@@ -425,8 +428,9 @@ const GroupStudentsPage = () => {
         <h1>Группа {group.name}</h1>
         <p className="total">
           Всего студентов: {students.length} · Сегодня: {today}
+          {currentPair !== null && <strong> · Текущая пара: {currentPair}</strong>}
+          {currentPair === null && <em> · Пара не определена (вне расписания)</em>}
         </p>
-
         {user?.role === 'HEAD' && (
           <div className="export-group-container">
             <div className="period-selector">

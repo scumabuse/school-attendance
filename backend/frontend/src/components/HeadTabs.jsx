@@ -1,10 +1,12 @@
 import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import './HeadTabs.css';
+import { getUser } from '../api/auth'; // ←←← ДОБАВЬ ЭТУ СТРОКУ
 
 const HeadTabs = ({ children }) => {
   const navigate = useNavigate();
   const location = useLocation();
+  const user = getUser();
   
   const isAnalytics = location.pathname === '/dashboard/analytics';
   const isStudents = location.pathname === '/head/students';
@@ -31,6 +33,15 @@ const HeadTabs = ({ children }) => {
         >
           Студенты
         </button>
+
+        {user?.role === 'ADMIN' && (
+        <button
+          className={`tab-button ${location.pathname === '/admin' ? 'active' : ''}`}
+          onClick={() => navigate('/admin')}
+        >
+          Админ-панель
+        </button>
+      )}
       </div>
       <div className="tab-content">
         {children}
