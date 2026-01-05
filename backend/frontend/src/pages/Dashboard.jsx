@@ -12,11 +12,13 @@ import { useRef } from "react";
 
 const TeacherDashboard = () => {
   const [groups, setGroups] = useState([]);
-  const [filteredGroups, setFilteredGroups] = useState([]);
   const [specialties, setSpecialties] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedSpecialty, setSelectedSpecialty] = useState('Все');
   const [selectedCourse, setSelectedCourse] = useState('Все');
+  const [selectedPair, setSelectedPair] = useState(null); // null = все пары, число = конкретная пара
+  const [schedule, setSchedule] = useState([]); // Расписание на сегодня
+  const [attendanceByPair, setAttendanceByPair] = useState({}); // { lessonId: { groupId: stats } }
   const [loading, setLoading] = useState(true);
   const [teacher, setTeacher] = useState(null);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
@@ -26,15 +28,29 @@ const TeacherDashboard = () => {
   const pendingScrollGroupRef = useRef(null);
   const pendingScrollPosRef = useRef(null);
 
-
-
+  // Получаем день недели (1 = Пн, 7 = Вс)
+  const getDayOfWeek = () => {
+    const now = new Date();
+    const day = now.getDay();
+    return day === 0 ? 7 : day;
+  };
 
   // Загрузка данных
   useEffect(() => {
-    const fetchGroups = async () => {
+    const fetchData = async () => {
       try {
         setTeacher(getUser());
-        const [resStudents, resLogs] = await Promise.all([
+        const today = new Date().toISOString().slice(0, 10);
+        const dayOfWeek = getDayOfWeek();
+
+        // Загружаем расписание на сегодня, студентов и посещаемость
+        const [resSchedule, resStudents, resLogs] = await Promise.all([
+          fetch(`${API_URL}/schedule/today`, {
+            headers: {
+              ...authHeaders(),
+              "Cache-Control": "no-cache"
+            }
+          }),
           fetch(`${API_URL}/students`, {
             headers: {
               ...authHeaders(),
@@ -42,17 +58,12 @@ const TeacherDashboard = () => {
               "Cache-Control": "no-cache"
             }
           }),
-          fetch(
-            `${API_URL}/attendance/log?date=${new Date()
-              .toISOString()
-              .slice(0, 10)}`,
-            {
-              headers: {
-                ...authHeaders(),
-                "Cache-Control": "no-cache"
-              }
+          fetch(`${API_URL}/attendance/log?date=${today}`, {
+            headers: {
+              ...authHeaders(),
+              "Cache-Control": "no-cache"
             }
-          )
+          })
         ]);
 
         if (!resStudents.ok) {
@@ -62,11 +73,14 @@ const TeacherDashboard = () => {
           return;
         }
 
+        const scheduleData = resSchedule.ok ? await resSchedule.json() : [];
         const dataStudents = await resStudents.json();
         const logs = resLogs.ok ? await resLogs.json() : [];
 
-        const grouped = {};
+        setSchedule(scheduleData);
 
+        // Группируем студентов по группам
+        const grouped = {};
         dataStudents.forEach((student) => {
           const group = student.group || {};
           if (!group.id) return;
@@ -77,77 +91,118 @@ const TeacherDashboard = () => {
               name: group.name,
               course: group.course,
               specialty: group.specialty || {},
-              students: [],
-              stats: null
+              students: []
             };
           }
           grouped[gid].students.push(student);
         });
 
-        // Добавляем статистику по сегодняшним логам
-        logs.forEach((log) => {
-          const gid = String(log.groupId);
-          const g = grouped[gid];
-          if (!g) return;
-          if (!g.stats) {
-            g.stats = { present: 0, absent: 0, sick: 0, valid: 0, wsk: 0, dual: 0, late: 0, marked: 0, unmarked: 0 };
-          }
-          g.stats.marked += 1;
-          if (log.status === "PRESENT") g.stats.present += 1;
-          if (log.status === "ABSENT") g.stats.absent += 1;
-          if (log.status === "SICK") g.stats.sick += 1;
-          if (log.status === "VALID_ABSENT") g.stats.valid += 1;
-          if (log.status === "ITHUB") g.stats.wsk += 1;
-          if (log.status === "DUAL") g.stats.dual += 1;
-          if (log.status === "LATE") g.stats.late += 1;
-        });
-
-        Object.values(grouped).forEach((g) => {
-          if (!g.stats) {
-            g.stats = { present: 0, absent: 0, sick: 0, valid: 0, wsk: 0, dual: 0, late: 0, marked: 0, unmarked: g.students.length };
-          } else {
-            g.stats.unmarked = Math.max(g.students.length - g.stats.marked, 0);
-          }
-        });
-
         const groupsList = Object.values(grouped);
 
-        // Для заведующей считаем ПРОЦЕНТ ЗА СЕГОДНЯ исходя из статистики по статусам:
-        // присутствующие = PRESENT, VALID_ABSENT (с бонусом +0.2), ITHUB, DUAL;
-        // LATE (По заявлению) не влияет на процент (не входит ни в числитель, ни в знаменатель);
-        // в знаменатель входят все выше + ABSENT; SICK не учитывается.
-        const currentUser = getUser();
-        if (currentUser && currentUser.role === 'HEAD') {
-          groupsList.forEach((g) => {
-            const s = g.stats;
-            if (!s) {
-              g.attendancePercent = null;
-              return;
-            }
-            // Базовые присутствующие (без LATE)
-            const presentCount =
-              (s.present || 0) +
-              (s.wsk || 0) +
-              (s.dual || 0);
-            // VALID_ABSENT (По приказу) повышает процент: добавляем бонус 0.2 за каждого
-            const validBonus = (s.valid || 0) * 0.2;
-            // В знаменатель входят присутствующие + VALID_ABSENT + ABSENT (LATE и SICK не учитываются)
-            const totalCount = presentCount + (s.valid || 0) + (s.absent || 0);
-            // Если никто не отмечен, процент должен быть 0, а не 100
-            if (s.marked === 0 || totalCount === 0) {
-              g.attendancePercent = 0;
-            } else {
-              // Процент с учетом бонуса от VALID_ABSENT
-              const percentWithBonus = ((presentCount + (s.valid || 0) + validBonus) / totalCount) * 100;
-              g.attendancePercent = Math.min(Math.round(percentWithBonus), 100);
+        // Группируем посещаемость по парам (lessonId)
+        const attendanceByLesson = {};
+        
+        // Инициализируем структуру для всех пар из расписания
+        scheduleData.forEach((lesson) => {
+          if (!attendanceByLesson[lesson.id]) {
+            attendanceByLesson[lesson.id] = {};
+          }
+          groupsList.forEach((group) => {
+            if (!attendanceByLesson[lesson.id][group.id]) {
+              attendanceByLesson[lesson.id][group.id] = {
+                present: 0,
+                absent: 0,
+                sick: 0,
+                valid: 0,
+                wsk: 0,
+                dual: 0,
+                late: 0,
+                remote: 0,
+                marked: 0,
+                unmarked: group.students.length
+              };
             }
           });
+        });
+
+        // Обрабатываем логи посещаемости
+        logs.forEach((log) => {
+          const lessonId = log.lessonId;
+          const groupId = String(log.groupId);
+          
+          // Если есть lessonId, группируем по паре
+          if (lessonId !== null && lessonId !== undefined) {
+            // Преобразуем lessonId в число для консистентности
+            const lessonIdNum = Number(lessonId);
+            if (!attendanceByLesson[lessonIdNum]) {
+              attendanceByLesson[lessonIdNum] = {};
+            }
+            if (!attendanceByLesson[lessonIdNum][groupId]) {
+              const group = groupsList.find(g => String(g.id) === groupId);
+              attendanceByLesson[lessonIdNum][groupId] = {
+                present: 0,
+                absent: 0,
+                sick: 0,
+                valid: 0,
+                wsk: 0,
+                dual: 0,
+                late: 0,
+                remote: 0,
+                marked: 0,
+                unmarked: group ? group.students.length : 0
+              };
+            }
+            
+            const stats = attendanceByLesson[lessonIdNum][groupId];
+            stats.marked += 1;
+            if (log.status === "PRESENT") stats.present += 1;
+            if (log.status === "ABSENT") stats.absent += 1;
+            if (log.status === "SICK") stats.sick += 1;
+            if (log.status === "VALID_ABSENT") stats.valid += 1;
+            if (log.status === "ITHUB") stats.wsk += 1;
+            if (log.status === "DUAL") stats.dual += 1;
+            if (log.status === "LATE") stats.late += 1;
+            if (log.status === "REMOTE") stats.remote += 1;
+          }
+        });
+
+        // Пересчитываем unmarked для каждой пары и группы
+        Object.keys(attendanceByLesson).forEach((lessonId) => {
+          Object.keys(attendanceByLesson[lessonId]).forEach((groupId) => {
+            const group = groupsList.find(g => String(g.id) === groupId);
+            if (group) {
+              const stats = attendanceByLesson[lessonId][groupId];
+              stats.unmarked = Math.max(group.students.length - stats.marked, 0);
+            }
+          });
+        });
+
+        // Для заведующей считаем процент посещаемости для каждой пары
+        const currentUser = getUser();
+        if (currentUser && currentUser.role === 'HEAD') {
+          Object.keys(attendanceByLesson).forEach((lessonId) => {
+            Object.keys(attendanceByLesson[lessonId]).forEach((groupId) => {
+              const stats = attendanceByLesson[lessonId][groupId];
+              const presentCount = (stats.present || 0) + (stats.wsk || 0) + (stats.dual || 0);
+              const validBonus = (stats.valid || 0) * 0.2;
+              const totalCount = presentCount + (stats.valid || 0) + (stats.absent || 0);
+              
+              if (stats.marked === 0 || totalCount === 0) {
+                stats.attendancePercent = 0;
+              } else {
+                const percentWithBonus = ((presentCount + (stats.valid || 0) + validBonus) / totalCount) * 100;
+                stats.attendancePercent = Math.min(Math.round(percentWithBonus), 100);
+              }
+            });
+          });
         }
+
+        setGroups(groupsList);
+        setAttendanceByPair(attendanceByLesson);
+        
         const specsList = Array.from(
           new Set(groupsList.map((g) => g.specialty?.name).filter(Boolean))
         );
-
-        setGroups(groupsList);
         setSpecialties(["Все", ...specsList]);
       } catch (err) {
         console.error("Ошибка запроса:", err);
@@ -158,18 +213,17 @@ const TeacherDashboard = () => {
       }
     };
 
-    fetchGroups();
+    fetchData();
 
-    // Обновляем данные при фокусе окна (когда пользователь возвращается на вкладку)
+    // Обновляем данные при фокусе окна
     const handleFocus = () => {
-      fetchGroups();
+      fetchData();
     };
     window.addEventListener('focus', handleFocus);
 
-    // Также обновляем при возврате на страницу через visibility API
     const handleVisibilityChange = () => {
       if (!document.hidden) {
-        fetchGroups();
+        fetchData();
       }
     };
     document.addEventListener('visibilitychange', handleVisibilityChange);
@@ -180,8 +234,8 @@ const TeacherDashboard = () => {
     };
   }, []);
 
-  // Фильтрация
-  useEffect(() => {
+  // Фильтрация групп
+  const getFilteredGroups = () => {
     let filtered = groups;
 
     if (searchTerm) {
@@ -198,8 +252,40 @@ const TeacherDashboard = () => {
       filtered = filtered.filter(g => g.course === parseInt(selectedCourse));
     }
 
-    setFilteredGroups(filtered);
-  }, [searchTerm, selectedSpecialty, selectedCourse, groups]);
+    return filtered;
+  };
+
+  // Получаем пары для отображения (1-7 сначала, затем 0)
+  const getPairsToDisplay = () => {
+    const pairs = schedule
+      .filter(lesson => lesson.pairNumber >= 1 && lesson.pairNumber <= 7)
+      .sort((a, b) => a.pairNumber - b.pairNumber);
+    
+    const classHour = schedule.find(lesson => lesson.pairNumber === 0);
+    
+    return { pairs, classHour };
+  };
+
+  // Получаем статистику группы для конкретной пары
+  const getGroupStatsForPair = (groupId, lessonId) => {
+    if (!attendanceByPair[lessonId] || !attendanceByPair[lessonId][groupId]) {
+      const group = groups.find(g => String(g.id) === groupId);
+      return {
+        present: 0,
+        absent: 0,
+        sick: 0,
+        valid: 0,
+        wsk: 0,
+        dual: 0,
+        late: 0,
+        remote: 0,
+        marked: 0,
+        unmarked: group ? group.students.length : 0,
+        attendancePercent: 0
+      };
+    }
+    return attendanceByPair[lessonId][groupId];
+  };
 
   // Извлечение уникальных курсов
   const courses = ['Все', ...new Set(groups.map(g => g.course).filter(Boolean))].sort((a, b) => a - b);
@@ -232,7 +318,6 @@ const TeacherDashboard = () => {
       const el = document.getElementById(`group-${targetId}`);
       if (el) {
         el.scrollIntoView({ behavior: "smooth", block: "center" });
-        // Подсвечиваем группу синей рамкой на 4 секунды
         setHighlightedGroupId(targetId);
         setTimeout(() => {
           setHighlightedGroupId(null);
@@ -252,7 +337,7 @@ const TeacherDashboard = () => {
       sessionStorage.removeItem('lastGroupId');
       sessionStorage.removeItem('dashboardScroll');
     }
-  }, [filteredGroups]);
+  }, [groups]);
 
   const handleGroupOpen = (groupId) => {
     sessionStorage.setItem('lastGroupId', groupId);
@@ -272,7 +357,6 @@ const TeacherDashboard = () => {
     };
 
     window.addEventListener('scroll', handleScroll);
-    // Инициализация при загрузке (на случай, если страница уже прокручена)
     handleScroll();
 
     return () => window.removeEventListener('scroll', handleScroll);
@@ -296,6 +380,102 @@ const TeacherDashboard = () => {
   };
 
   if (loading) return <div className="loading">Загрузка...</div>;
+
+  const filteredGroups = getFilteredGroups();
+  const { pairs, classHour } = getPairsToDisplay();
+
+  // Рендер карточек группы для конкретной пары
+  const renderGroupCardsForPair = (lessonId, pairNumber) => {
+    return (
+      <div key={lessonId} className="pair-section">
+        <h2 className="pair-title">
+          {pairNumber === 0 ? 'Классный час' : `${pairNumber} пара`}
+          {schedule.find(s => s.id === lessonId) && (
+            <span className="pair-time">
+              {schedule.find(s => s.id === lessonId).startTime} - {schedule.find(s => s.id === lessonId).endTime}
+            </span>
+          )}
+        </h2>
+        <div className="groups-scroll">
+          <div className="groups-container">
+            {filteredGroups.length === 0 ? (
+              <p className="no-groups">Группы не найдены</p>
+            ) : (
+              filteredGroups.map(group => {
+                const stats = getGroupStatsForPair(group.id, lessonId);
+                return (
+                  <div
+                    key={`${lessonId}-${group.id}`}
+                    id={`group-${group.id}`}
+                    className={`group-card ${highlightedGroupId === group.id ? 'highlighted' : ''}`}
+                    onClick={() => handleGroupOpen(group.id)}
+                    style={{ cursor: "pointer" }}
+                  >
+                    <div className="group-header">
+                      <h3>Группа {group.name}</h3>
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
+                        <span className="student-count">
+                          {group.students.length} студентов
+                        </span>
+                        {teacher?.role === 'HEAD' && stats.attendancePercent !== undefined && (
+                          <span style={{
+                            fontSize: '16px',
+                            fontWeight: 'bold',
+                            color: stats.attendancePercent >= 80 ? '#4caf50' : stats.attendancePercent >= 60 ? '#ff9800' : '#f44336'
+                          }}>
+                            {stats.attendancePercent !== null ? `${stats.attendancePercent}%` : '—'}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="stats-grid">
+                      <div className="stat">
+                        <span className="label">Присутствующие</span>
+                        <span className="value present">{stats.present || 0}</span>
+                      </div>
+                      <div className="stat">
+                        <span className="label">Отсутствующие</span>
+                        <span className="value absent">{stats.absent || 0}</span>
+                      </div>
+                      <div className="stat">
+                        <span className="label">Уважительная</span>
+                        <span className="value valid">{stats.valid || 0}</span>
+                      </div>
+                      <div className="stat">
+                        <span className="label">По заявлению</span>
+                        <span className="value late">{stats.late || 0}</span>
+                      </div>
+                      <div className="stat">
+                        <span className="label">Больничный</span>
+                        <span className="value sick">{stats.sick || 0}</span>
+                      </div>
+                      <div className="stat">
+                        <span className="label">IT HUB</span>
+                        <span className="value wsk">{stats.wsk || 0}</span>
+                      </div>
+                      <div className="stat">
+                        <span className="label">Дуальное</span>
+                        <span className="value dual">{stats.dual || 0}</span>
+                      </div>
+                      <div className="stat">
+                        <span className="label">Дистант</span>
+                        <span className="value remote">{stats.remote || 0}</span>
+                      </div>
+                      <div className="stat">
+                        <span className="label">Отмечено</span>
+                        <span className="value marked">{stats.marked || 0}</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   const dashboardContent = (
     <div className="teacher-dashboard">
@@ -340,81 +520,45 @@ const TeacherDashboard = () => {
             </option>
           ))}
         </select>
-      </div>
 
-      {/* Горизонтальный список групп */}
-      <div className="groups-scroll">
-        <div className="groups-container">
-          {filteredGroups.length === 0 ? (
-            <p className="no-groups">Группы не найдены</p>
-          ) : (
-            filteredGroups.map(group => (
-              <div
-                key={group.id}
-                id={`group-${group.id}`}
-                className={`group-card ${highlightedGroupId === group.id ? 'highlighted' : ''}`}
-                onClick={() => handleGroupOpen(group.id)}
-                style={{ cursor: "pointer" }}
-              >
-
-                <div className="group-header">
-                  <h3>Группа {group.name}</h3>
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
-                    <span className="student-count">
-                      {group.students.length} студентов
-                    </span>
-                    {teacher?.role === 'HEAD' && group.attendancePercent !== undefined && (
-                      <span style={{
-                        fontSize: '16px',
-                        fontWeight: 'bold',
-                        color: group.attendancePercent >= 80 ? '#4caf50' : group.attendancePercent >= 60 ? '#ff9800' : '#f44336'
-                      }}>
-                        {group.attendancePercent !== null ? `${group.attendancePercent}%` : '—'}
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-
-                <div className="stats-grid">
-                  <div className="stat">
-                    <span className="label">Присутствующие</span>
-                    <span className="value present">{group.stats?.present || 0}</span>
-                  </div>
-                  <div className="stat">
-                    <span className="label">Отсутствующие</span>
-                    <span className="value absent">{group.stats?.absent || 0}</span>
-                  </div>
-                  <div className="stat">
-                    <span className="label">Уважительная</span>
-                    <span className="value valid">{group.stats?.valid || 0}</span>
-                  </div>
-                  <div className="stat">
-                    <span className="label">По заявлению</span>
-                    <span className="value late">{group.stats?.late || 0}</span>
-                  </div>
-                  <div className="stat">
-                    <span className="label">Больничный</span>
-                    <span className="value sick">{group.stats?.sick || 0}</span>
-                  </div>
-                  <div className="stat">
-                    <span className="label">IT HUB</span>
-                    <span className="value wsk">{group.stats?.wsk || 0}</span>
-                  </div>
-                  <div className="stat">
-                    <span className="label">Дуальное</span>
-                    <span className="value dual">{group.stats?.dual || 0}</span>
-                  </div>
-                  <div className="stat">
-                    <span className="label">Отмечено</span>
-                    <span className="value marked">{group.stats?.marked || 0}</span>
-                  </div>
-                </div>
-              </div>
-            ))
+        {/* Фильтр пар */}
+        <select
+          value={selectedPair === null ? 'all' : selectedPair}
+          onChange={(e) => {
+            const value = e.target.value;
+            setSelectedPair(value === 'all' ? null : parseInt(value, 10));
+          }}
+        >
+          <option value="all">Все пары</option>
+          {pairs.map(lesson => (
+            <option key={lesson.id} value={lesson.pairNumber}>
+              {lesson.pairNumber} пара
+            </option>
+          ))}
+          {classHour && (
+            <option value="0">Классный час</option>
           )}
-        </div>
+        </select>
       </div>
+
+      {/* Отображение пар */}
+      {selectedPair === null ? (
+        <>
+          {/* Показываем все пары от 1 до 7 */}
+          {pairs.map(lesson => renderGroupCardsForPair(lesson.id, lesson.pairNumber))}
+          
+          {/* Классный час внизу */}
+          {classHour && renderGroupCardsForPair(classHour.id, 0)}
+        </>
+      ) : (
+        <>
+          {/* Показываем только выбранную пару */}
+          {selectedPair === 0 && classHour && renderGroupCardsForPair(classHour.id, 0)}
+          {selectedPair !== 0 && pairs
+            .filter(lesson => lesson.pairNumber === selectedPair)
+            .map(lesson => renderGroupCardsForPair(lesson.id, lesson.pairNumber))}
+        </>
+      )}
 
       {/* Плавающая кнопка QR для преподавателя/заведующей */}
       {teacher && (teacher.role === 'HEAD' || teacher.role === 'TEACHER') && (

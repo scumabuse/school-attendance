@@ -890,12 +890,30 @@ app.get('/api/attendance/stats/summary', authenticate, isHeadOrAdmin, async (req
         );
       }
 
+      // Подсчет болеющих (SICK) за период
+      const sickRecords = await prisma.attendance.findMany({
+        where: {
+          groupId: group.id,
+          date: { gte: range.start, lte: range.end },
+          status: 'SICK'
+        },
+        select: { studentId: true, date: true }
+      });
+
+      // Уникальные студенты, которые болели (по датам)
+      const uniqueSickStudents = new Set();
+      sickRecords.forEach(r => {
+        uniqueSickStudents.add(r.studentId);
+      });
+      const sickCount = uniqueSickStudents.size;
+
       summary.push({
         groupId: group.id,
         groupName: group.name,
         curatorId: group.curatorId,
         percent: Math.round(stats.percent || 0),
-        studentsCount: group._count.students
+        studentsCount: group._count.students,
+        sickCount: sickCount
       });
     }
 

@@ -242,6 +242,22 @@ const AnalyticsPage = () => {
 
   const maxPercent = Math.max(...stats.groups.map(g => g.percent), 100);
 
+  // Расчет процента болеющих
+  const groupsWithSickPercent = stats.groups.map(g => ({
+    ...g,
+    sickPercent: g.studentsCount > 0 ? Math.round((g.sickCount || 0) / g.studentsCount * 100) : 0
+  }));
+
+  // Общий процент болеющих
+  const totalStudents = stats.groups.reduce((sum, g) => sum + (g.studentsCount || 0), 0);
+  const totalSick = stats.groups.reduce((sum, g) => sum + (g.sickCount || 0), 0);
+  const overallSickPercent = totalStudents > 0 ? Math.round((totalSick / totalStudents) * 100) : 0;
+
+  // Топ 10 групп с наибольшим процентом болеющих
+  const topSickGroups = [...groupsWithSickPercent]
+    .sort((a, b) => b.sickPercent - a.sickPercent)
+    .slice(0, 10);
+
   return (
     <HeadTabs>
       <div className="analytics-modern">
@@ -350,6 +366,27 @@ const AnalyticsPage = () => {
                   <span className="outsider-rank">#{stats.groups.length - index}</span>
                   <span className="outsider-name">{group.groupName}</span>
                   <span className="outsider-percent bad">{group.percent}%</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Статистика по болеющим */}
+        <div className="sick-stats-section">
+          <div className="sick-overall">
+            <div className="sick-overall-label">Общий процент болеющих</div>
+            <div className="sick-overall-value">{overallSickPercent}%</div>
+          </div>
+          
+          <div className="sick-top-groups">
+            <h3>Топ 10 групп с наибольшим процентом болеющих</h3>
+            <div className="sick-groups-list">
+              {topSickGroups.map((group, index) => (
+                <div key={group.groupId} className="sick-group-item">
+                  <span className="sick-group-rank">#{index + 1}</span>
+                  <span className="sick-group-name">{group.groupName}</span>
+                  <span className="sick-group-percent">{group.sickPercent}%</span>
                 </div>
               ))}
             </div>

@@ -100,11 +100,19 @@ async function isPracticeDay(groupId, date) {
  */
 router.get('/log', async (req, res) => {
   try {
-    const { groupId, date, studentId, startDate, endDate } = req.query;
+    const { groupId, date, studentId, startDate, endDate, lessonId } = req.query;
     const where = {};
 
     if (groupId) where.groupId = groupId;
     if (studentId) where.studentId = studentId;
+    if (lessonId !== undefined) {
+      // Если lessonId передан как null или пустая строка, ищем записи без пары
+      if (lessonId === 'null' || lessonId === '') {
+        where.lessonId = null;
+      } else {
+        where.lessonId = parseInt(lessonId, 10);
+      }
+    }
 
     if (date) {
       const startOfDay = normalizeAttendanceDate(date); // Например: 2025-12-22T00:00:00.000Z
@@ -138,7 +146,8 @@ router.get('/log', async (req, res) => {
       include: {
         student: { select: { fullName: true } },
         group: { select: { name: true } },
-        updatedBy: { select: { fullName: true } }
+        updatedBy: { select: { fullName: true } },
+        lesson: { select: { id: true, pairNumber: true, dayOfWeek: true } }
       },
       orderBy: { date: 'desc' }
     });
@@ -151,6 +160,7 @@ router.get('/log', async (req, res) => {
       id: l.id,
       studentId: l.studentId,
       groupId: l.groupId,
+      lessonId: l.lessonId,
       fullName: l.student.fullName,
       groupName: l.group.name,
       status: l.status,

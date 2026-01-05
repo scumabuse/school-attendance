@@ -148,9 +148,9 @@ model LessonSchedule {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
-  // --- ДОБАВЬ ЭТУ СТРОКУ НИЖЕ ---
+ 
   attendances Attendance[]
-  // ------------------------------
+  
 
   @@unique([dayOfWeek, pairNumber])
   @@map("lesson_schedule")
@@ -171,6 +171,7 @@ enum AttendanceStatus {
   VALID_ABSENT
   DUAL
   LATE
+  REMOTE
 }
 
 enum QualificationType {

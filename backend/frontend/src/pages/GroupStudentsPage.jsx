@@ -271,10 +271,11 @@ const GroupStudentsPage = () => {
       else if (st === "ITHUB") acc.wsk++;
       else if (st === "DUAL") acc.dual++;
       else if (st === "LATE") acc.late++;
+      else if (st === "REMOTE") acc.remote++;
       else acc.none++;
       return acc;
     },
-    { present: 0, absent: 0, sick: 0, valid: 0, wsk: 0, dual: 0, late: 0, none: 0 }
+    { present: 0, absent: 0, sick: 0, valid: 0, wsk: 0, dual: 0, late: 0, remote: 0, none: 0 }
   );
 
   const handleSave = async () => {
@@ -522,6 +523,13 @@ const GroupStudentsPage = () => {
                   >
                     IT HUB
                   </button>
+                  <button
+                    className={`status-btn remote ${currentStatus === "REMOTE" ? "active" : ""}`}
+                    onClick={() => toggleStatus(student.id, "REMOTE")}
+                    disabled={isPractice || isWeekendOrHoliday}
+                  >
+                    Дистант
+                  </button>
                   <div className="status-dropdown-container">
                     <button
                       className={`status-btn dropdown-btn ${currentStatus === "VALID_ABSENT" || currentStatus === "LATE" ? "active" : ""}`}
@@ -582,6 +590,7 @@ const GroupStudentsPage = () => {
             <span className="stat-item valid">По приказу {counts.valid}</span>
             <span className="stat-item late">По заявлению {counts.late}</span>
             <span className="stat-item absent">Без причины {counts.absent}</span>
+            <span className="stat-item remote">Дистант {counts.remote}</span>
             <span className="stat-item unmarked">Не отмечено {counts.none}</span>
           </div>
 
@@ -748,6 +757,7 @@ const GroupStudentsPage = () => {
         .status-btn.wsk.active     { background: #e1bee7; color: #7b1fa2; }
         .status-btn.dual.active    { background: #b3e5fc; color: #0277bd; }
         .status-btn.late.active    { background: #ffe0b2; color: #e65100; }
+        .status-btn.remote.active  { background: #d1c4e9; color: #512da8; }
 
         .status-btn:disabled {
           opacity: 0.5;
@@ -888,6 +898,7 @@ const GroupStudentsPage = () => {
         .stat-item.wsk    { background: #e1bee7; color: #7b1fa2; }
         .stat-item.dual   { background: #b3e5fc; color: #0277bd; }
         .stat-item.late   { background: #ffe0b2; color: #e65100; }
+        .stat-item.remote { background: #d1c4e9; color: #512da8; }
         .stat-item.unmarked { background: #e0e0e0; color: #424242; }
 
         .save-btn {
@@ -925,13 +936,20 @@ const GroupStudentsPage = () => {
         }
 
         @media (max-width: 640px) {
+          .group-attendance {
+            padding: 16px;
+            padding-bottom: 200px;
+          }
+
           .student-row {
             flex-direction: column;
             align-items: flex-start;
+            gap: 12px;
           }
           .status-buttons {
             width: 100%;
             justify-content: flex-start;
+            flex-wrap: wrap;
           }
           .bottom-bar {
             padding: 16px;
@@ -940,9 +958,130 @@ const GroupStudentsPage = () => {
           }
           .stats-summary {
             justify-content: center;
+            flex-wrap: wrap;
+            gap: 8px;
           }
           .save-btn {
             width: 100%;
+          }
+        }
+
+        @media (max-width: 430px) {
+          .group-attendance {
+            padding: 12px;
+            padding-bottom: 180px;
+          }
+
+          h1 {
+            font-size: 20px;
+            margin-bottom: 6px;
+          }
+
+          .total {
+            font-size: 13px;
+            margin-bottom: 16px;
+          }
+
+          .back-btn {
+            font-size: 16px;
+            margin-bottom: 12px;
+          }
+
+          .export-group-container {
+            flex-direction: column;
+            gap: 8px;
+            padding: 10px;
+          }
+
+          .export-period-select {
+            padding: 8px 10px;
+            font-size: 14px;
+          }
+
+          .export-group-btn {
+            padding: 8px 16px;
+            font-size: 13px;
+          }
+
+          .custom-dates {
+            flex-direction: column;
+            gap: 8px;
+            width: 100%;
+          }
+
+          .custom-dates input {
+            width: 100%;
+            padding: 8px;
+            font-size: 14px;
+          }
+
+          .custom-dates span {
+            display: none;
+          }
+
+          .warning-banner {
+            padding: 10px 12px;
+            font-size: 13px;
+            margin-bottom: 16px;
+          }
+
+          .student-row {
+            padding: 12px 16px;
+            gap: 10px;
+          }
+
+          .student-name {
+            font-size: 14px;
+            min-width: unset;
+            max-width: 100%;
+          }
+
+          .status-buttons {
+            gap: 6px;
+          }
+
+          .status-btn {
+            padding: 6px 12px;
+            font-size: 12px;
+            border-radius: 20px;
+          }
+
+          .dropdown-btn {
+            font-size: 12px;
+          }
+
+          .status-dropdown-menu {
+            min-width: 140px;
+          }
+
+          .status-dropdown-item {
+            padding: 8px 12px;
+            font-size: 12px;
+          }
+
+          .bottom-bar {
+            padding: 12px;
+            gap: 12px;
+          }
+
+          .stats-summary {
+            font-size: 12px;
+            gap: 6px;
+          }
+
+          .stat-item {
+            padding: 6px 10px;
+            font-size: 12px;
+          }
+
+          .save-btn {
+            padding: 12px 24px;
+            font-size: 14px;
+          }
+
+          .loading {
+            padding: 60px 20px;
+            font-size: 16px;
           }
         }
       `}</style>

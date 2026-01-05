@@ -13,6 +13,7 @@ const ATTENDANCE_RULES = {
   LATE:          { isPresent: false, countsInTotal: false, bonus: 0   }, // ОП (По заявлению) - не влияет на процент
   ABSENT:        { isPresent: false, countsInTotal: true,  bonus: 0   }, // О
   SICK:          { isPresent: false, countsInTotal: false, bonus: 0   }, // Б
+  REMOTE:        { isPresent: false, countsInTotal: false, bonus: 0   }, // Дистант - не влияет на процент
 };
 
 /**

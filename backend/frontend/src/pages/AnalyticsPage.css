@@ -432,14 +432,43 @@
   .analytics-header {
     flex-direction: column;
     align-items: stretch;
+    gap: 12px;
+  }
+
+  .analytics-header h1 {
+    font-size: 22px;
+  }
+
+  .period-subtitle {
+    font-size: 13px;
   }
   
   .summary-grid {
     grid-template-columns: 1fr;
+    gap: 16px;
   }
   
   .analytics-modern {
     padding: 16px;
+  }
+
+  .analytics-actions {
+    flex-direction: column;
+    width: 100%;
+    gap: 10px;
+  }
+
+  .period-selector {
+    width: 100%;
+  }
+
+  .period-select {
+    width: 100%;
+    min-width: unset;
+  }
+
+  .export-btn {
+    width: 100%;
   }
 
   .table-wrapper {
@@ -451,4 +480,320 @@
     padding: 10px 12px;
     font-size: 14px;
   }
+
+  .summary-item {
+    padding: 16px;
+  }
+
+  .summary-value {
+    font-size: 28px;
+  }
+
+  .bar-item {
+    padding: 12px;
+  }
+
+  .bar-header {
+    font-size: 14px;
+  }
+
+  .bar-footer {
+    font-size: 12px;
+  }
+
+  .sick-stats-section {
+    padding: 16px;
+    margin-top: 24px;
+  }
+
+  .sick-overall {
+    padding: 16px;
+    margin-bottom: 24px;
+  }
+
+  .sick-overall-value {
+    font-size: 28px;
+  }
+
+  .sick-top-groups h3 {
+    font-size: 16px;
+  }
+}
+
+/* Маленькие телефоны (430px и меньше) */
+@media (max-width: 430px) {
+  .analytics-modern {
+    padding: 12px;
+  }
+
+  .analytics-header {
+    margin-bottom: 20px;
+  }
+
+  .analytics-header h1 {
+    font-size: 20px;
+    line-height: 1.3;
+  }
+
+  .period-subtitle {
+    font-size: 12px;
+  }
+
+  .period-select {
+    padding: 8px 12px;
+    font-size: 14px;
+  }
+
+  .export-btn {
+    padding: 8px 12px;
+    font-size: 14px;
+  }
+
+  .summary-grid {
+    gap: 12px;
+    margin-bottom: 24px;
+  }
+
+  .summary-item {
+    padding: 12px;
+  }
+
+  .summary-label,
+  .summary-label-lider,
+  .summary-labe-loser {
+    font-size: 11px;
+    margin-bottom: 6px;
+  }
+
+  .summary-value {
+    font-size: 24px;
+  }
+
+  .leader-item,
+  .outsider-item {
+    padding: 6px 0;
+    gap: 8px;
+  }
+
+  .leader-rank,
+  .outsider-rank {
+    font-size: 12px;
+    min-width: 24px;
+  }
+
+  .leader-name,
+  .outsider-name {
+    font-size: 13px;
+  }
+
+  .leader-percent,
+  .outsider-percent {
+    font-size: 14px;
+    min-width: 40px;
+  }
+
+  .chart-section h2,
+  .table-section h2 {
+    font-size: 18px;
+    margin-bottom: 12px;
+  }
+
+  .bars-scroll-container,
+  .table-scroll-container {
+    max-height: 400px;
+    padding: 10px;
+  }
+
+  .bar-item {
+    padding: 10px;
+  }
+
+  .bar-header {
+    font-size: 13px;
+    margin-bottom: 8px;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+
+  .group-name {
+    font-size: 12px;
+  }
+
+  .group-percent {
+    font-size: 13px;
+  }
+
+  .bar-footer {
+    font-size: 11px;
+    margin-top: 6px;
+  }
+
+  .analytics-table th,
+  .analytics-table td {
+    padding: 8px 10px;
+    font-size: 12px;
+  }
+
+  .group-name-cell {
+    font-size: 13px;
+  }
+
+  .percent-text {
+    font-size: 14px;
+  }
+
+  .status-badge {
+    padding: 4px 8px;
+    font-size: 10px;
+  }
+
+  .sick-stats-section {
+    padding: 12px;
+    margin-top: 20px;
+  }
+
+  .sick-overall {
+    padding: 12px;
+    margin-bottom: 20px;
+  }
+
+  .sick-overall-label {
+    font-size: 11px;
+    margin-bottom: 6px;
+  }
+
+  .sick-overall-value {
+    font-size: 24px;
+  }
+
+  .sick-top-groups h3 {
+    font-size: 14px;
+    margin-bottom: 12px;
+  }
+
+  .sick-groups-list {
+    gap: 8px;
+  }
+
+  .sick-group-item {
+    padding: 10px;
+    gap: 8px;
+  }
+
+  .sick-group-rank {
+    font-size: 12px;
+    min-width: 24px;
+  }
+
+  .sick-group-name {
+    font-size: 13px;
+  }
+
+  .sick-group-percent {
+    font-size: 14px;
+    min-width: 40px;
+  }
+
+  .bottom-grid {
+    gap: 24px;
+    margin-top: 24px;
+  }
+
+  .custom-dates {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .custom-dates input {
+    width: 100%;
+    padding: 8px;
+    font-size: 14px;
+  }
+
+  .custom-dates span {
+    display: none;
+  }
+}
+
+/* Статистика по болеющим */
+.sick-stats-section {
+  background: white;
+  padding: 24px;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  margin-top: 40px;
+}
+
+.sick-overall {
+  text-align: center;
+  padding: 20px;
+  margin-bottom: 32px;
+  background: #fef3c7;
+  border-radius: 8px;
+  border: 1px solid #fde68a;
+}
+
+.sick-overall-label {
+  font-size: 14px;
+  color: #92400e;
+  margin-bottom: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-weight: 500;
+}
+
+.sick-overall-value {
+  font-size: 36px;
+  font-weight: 700;
+  color: #d97706;
+}
+
+.sick-top-groups h3 {
+  font-size: 18px;
+  font-weight: 600;
+  color: #1e293b;
+  margin-bottom: 16px;
+}
+
+.sick-groups-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.sick-group-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  background: #f8fafc;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  transition: background 0.2s;
+}
+
+.sick-group-item:hover {
+  background: #f1f5f9;
+}
+
+.sick-group-rank {
+  font-size: 14px;
+  font-weight: 600;
+  color: #64748b;
+  min-width: 32px;
+}
+
+.sick-group-name {
+  flex: 1;
+  font-size: 15px;
+  font-weight: 500;
+  color: #334155;
+}
+
+.sick-group-percent {
+  font-size: 16px;
+  font-weight: 600;
+  color: #d97706;
+  min-width: 50px;
+  text-align: right;
 }

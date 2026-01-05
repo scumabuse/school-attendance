@@ -14,7 +14,8 @@ const STATUS_MAP = {
   ITHUB: 'IT',
   VALID_ABSENT: 'У',
   DUAL: 'Д',
-  LATE: 'ОП'
+  LATE: 'ОП',
+  REMOTE: 'Дис'
 };
 
 const STATUS_COLORS = {
@@ -25,6 +26,7 @@ const STATUS_COLORS = {
   'IT': 'C300FF',
   'Д': 'FFADD8E6',
   'ОП': 'FFFFA500',
+  'Дис': 'FFD1C4E9',
   'Пр': 'FFADD8E6',
   'Вых': 'FFDDDDDD'
 };
