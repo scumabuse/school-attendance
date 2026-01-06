@@ -154,8 +154,6 @@ router.get('/log', async (req, res) => {
 
     console.log('Найдено логов:', logs.length, 'для запроса:', JSON.stringify(where));
 
-    console.log('LOGS TO SEND:', logs);
-
     res.json(logs.map(l => ({
       id: l.id,
       studentId: l.studentId,

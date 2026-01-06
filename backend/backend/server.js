@@ -1135,6 +1135,52 @@ app.get('/api/practice-days/range', authenticate, isHeadOrAdmin, async (req, res
   }
 });
 
+// DELETE /api/practice-days/batch
+// Удаляет дни практики для группы в диапазоне дат
+app.delete('/api/practice-days/batch', authenticate, isAdmin, async (req, res) => {
+  try {
+    const { groupId, startDate, endDate } = req.body;
+
+    if (!groupId || !startDate || !endDate) {
+      return res.status(400).json({ error: 'groupId, startDate и endDate обязательны' });
+    }
+
+    const group = await prisma.group.findUnique({ where: { id: groupId } });
+    if (!group) {
+      return res.status(400).json({ error: 'Группа не найдена' });
+    }
+
+    const start = DateTime.fromISO(startDate).startOf('day');
+    const end = DateTime.fromISO(endDate).startOf('day');
+
+    if (start > end) {
+      return res.status(400).json({ error: 'Начальная дата не может быть позже конечной' });
+    }
+
+    const startDateObj = start.toJSDate();
+    const endDateObj = end.toJSDate();
+    endDateObj.setHours(23, 59, 59, 999);
+
+    const result = await prisma.practiceDay.deleteMany({
+      where: {
+        groupId,
+        date: {
+          gte: startDateObj,
+          lte: endDateObj
+        }
+      }
+    });
+
+    res.json({
+      message: `Удалено ${result.count} дней практики`,
+      deletedCount: result.count
+    });
+  } catch (err) {
+    console.error('Ошибка удаления дней практики:', err);
+    res.status(500).json({ error: 'Ошибка сервера' });
+  }
+});
+
 // GET /api/users?role=HEAD — получить пользователей по роли
 app.get('/api/users', authenticate, isHeadOrAdmin, async (req, res) => {
   try {
@@ -1159,6 +1205,83 @@ app.get('/api/users', authenticate, isHeadOrAdmin, async (req, res) => {
     res.json(users);
   } catch (err) {
     console.error('Ошибка получения пользователей:', err);
+    res.status(500).json({ error: 'Ошибка сервера' });
+  }
+});
+
+// DELETE /api/practice-days/batch — удаление дней практики по группе и диапазону
+app.delete('/api/practice-days/batch', authenticate, isAdmin, async (req, res) => {
+  try {
+    const { groupId, startDate, endDate } = req.body;
+
+    if (!groupId || !startDate || !endDate) {
+      return res.status(400).json({ error: 'groupId, startDate и endDate обязательны' });
+    }
+
+    const group = await prisma.group.findUnique({ where: { id: groupId } });
+    if (!group) {
+      return res.status(400).json({ error: 'Группа не найдена' });
+    }
+
+    const start = DateTime.fromISO(startDate).startOf('day').toJSDate();
+    const end = DateTime.fromISO(endDate).startOf('day').plus({ days: 1 }).minus({ milliseconds: 1 }).toJSDate(); // до конца дня
+
+    const deleted = await prisma.practiceDay.deleteMany({
+      where: {
+        groupId,
+        date: {
+          gte: start,
+          lte: end
+        }
+      }
+    });
+
+    res.json({
+      message: `Удалено ${deleted.count} дней практики`,
+      deletedCount: deleted.count
+    });
+  } catch (err) {
+    console.error('Ошибка удаления дней практики:', err);
+    res.status(500).json({ error: 'Ошибка сервера' });
+  }
+});
+
+app.patch('/api/admin/holidays/:id', authenticate, isHeadOrAdmin, async (req, res) => {
+  try {
+    const { date, name } = req.body;
+    const holidayId = Number(req.params.id);
+
+    if (isNaN(holidayId)) {
+      return res.status(400).json({ error: 'Неверный ID праздника' });
+    }
+
+    if (!date || !name) {
+      return res.status(400).json({ error: 'Дата и название обязательны' });
+    }
+
+    // Проверяем, существует ли праздник
+    const existingHoliday = await prisma.holiday.findUnique({
+      where: { id: holidayId }
+    });
+
+    if (!existingHoliday) {
+      return res.status(404).json({ error: 'Праздник не найден. Проверьте ID.' });
+    }
+
+    const updated = await prisma.holiday.update({
+      where: { id: holidayId },
+      data: {
+        date: new Date(date),
+        name: name.trim()
+      }
+    });
+
+    res.json(updated);
+  } catch (err) {
+    console.error('Ошибка редактирования праздника:', err);
+    if (err.code === 'P2025') {
+      return res.status(404).json({ error: 'Праздник не найден' });
+    }
     res.status(500).json({ error: 'Ошибка сервера' });
   }
 });
