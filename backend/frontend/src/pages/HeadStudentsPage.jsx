@@ -39,11 +39,17 @@ const HeadStudentsPage = () => {
         });
 
         if (!res.ok) {
-          throw new Error("Не удалось загрузить список студентов");
+          throw new Error("Не удалось загрузить список учеников");
         }
 
         const data = await res.json();
-        setStudents(data);
+        // Фильтруем только учеников из классов (1А-11В), скрываем остальных
+        const classPattern = /^([1-9]|1[01])[А-В]$/;
+        const filteredData = data.filter((s) => {
+          if (!s.group?.name) return false;
+          return classPattern.test(s.group.name);
+        });
+        setStudents(filteredData);
 
         // Загружаем проценты посещаемости КАЖДОГО студента за всё время (учебный год)
         const percentPromises = data.map(async (s) => {
@@ -64,7 +70,7 @@ const HeadStudentsPage = () => {
         setPercents(map);
       } catch (err) {
         console.error(err);
-        setError(err.message || "Ошибка загрузки студентов");
+        setError(err.message || "Ошибка загрузки учеников");
       } finally {
         setLoading(false);
       }
@@ -137,7 +143,7 @@ const HeadStudentsPage = () => {
   }
 
   if (loading) {
-    return <div className="loading">Загрузка списка студентов...</div>;
+    return <div className="loading">Загрузка списка учеников...</div>;
   }
 
   return (
@@ -146,7 +152,7 @@ const HeadStudentsPage = () => {
         ← Назад к дашборду
       </button>
 
-      <h1>Все студенты</h1>
+      <h1>Все ученики</h1>
       <p className="subtitle">
         Всего: {students.length} · Отфильтровано: {filteredStudents.length}
       </p>
@@ -157,7 +163,7 @@ const HeadStudentsPage = () => {
         <div className="search-box">
           <input
             type="text"
-            placeholder="Поиск по ФИО или группе"
+            placeholder="Поиск по ФИО или классу"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />
@@ -181,7 +187,7 @@ const HeadStudentsPage = () => {
         >
           {courseOptions.map((c) => (
             <option key={c} value={c}>
-              {c === "Все" ? "Все курсы" : `${c} курс`}
+              {c === "Все" ? "Все классы" : `${c} класс`}
             </option>
           ))}
         </select>
@@ -191,13 +197,13 @@ const HeadStudentsPage = () => {
         <div className="students-header">
           <span>#</span>
           <span>ФИО</span>
-          <span>Группа</span>
-          <span>Курс</span>
-          <span>Специальность</span>
+          <span>Класс</span>
+          <span>Класс (номер)</span>
+          <span>Буква</span>
           <span>% за всё время</span>
         </div>
         {paginatedStudents.length === 0 ? (
-          <div className="no-data">Студенты не найдены</div>
+          <div className="no-data">Ученики не найдены</div>
         ) : (
           paginatedStudents.map((s, index) => (
             <div key={s.id} className="students-row">

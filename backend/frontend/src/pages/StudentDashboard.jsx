@@ -1,13 +1,17 @@
 import React, { useEffect, useState } from "react";
 import QrScanner from "../components/QR/QRscanner";
 import { API_URL } from "../config";
-import { authHeaders, getUser } from "../api/auth";
+import { authHeaders, getUser, logout } from "../api/auth";
+import { useNavigate } from "react-router-dom";
+import ConfirmModal from "../components/ConfirmModal";
 
 const StudentDashboard = () => {
   const [user, setUser] = useState(null);
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const navigate = useNavigate();
 
   useEffect(() => {
     const u = getUser();
@@ -36,11 +40,32 @@ const StudentDashboard = () => {
     }
   };
 
+  const handleLogoutClick = () => {
+    setShowLogoutModal(true);
+  };
+
+  const handleLogoutConfirm = () => {
+    logout();
+    navigate('/login', { replace: true });
+  };
+
+  const handleLogoutCancel = () => {
+    setShowLogoutModal(false);
+  };
+
   return (
     <div style={{ maxWidth: "900px", margin: "0 auto", padding: "20px" }}>
-      <h1 style={{ marginBottom: "8px" }}>Кабинет студента</h1>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+        <h1 style={{ margin: 0 }}>Кабинет ученика</h1>
+        <button
+          className="logout-btn"
+          onClick={handleLogoutClick}
+        >
+          Выйти
+        </button>
+      </div>
       <p style={{ marginBottom: "24px", color: "#555" }}>
-        {user?.fullName || "Студент"} — сканируйте QR преподавателя или заведующей,
+        {user?.fullName || "Ученик"} — сканируйте QR преподавателя или заведующей,
         чтобы отметиться на занятии.
       </p>
 
@@ -103,7 +128,7 @@ const StudentDashboard = () => {
               <thead>
                 <tr style={{ background: "#f7f7f7" }}>
                   <th style={{ padding: "8px", textAlign: "left" }}>Дата</th>
-                  <th style={{ padding: "8px", textAlign: "left" }}>Группа</th>
+                  <th style={{ padding: "8px", textAlign: "left" }}>Класс</th>
                   <th style={{ padding: "8px", textAlign: "left" }}>Статус</th>
                 </tr>
               </thead>
@@ -162,6 +187,37 @@ const StudentDashboard = () => {
           </div>
         )}
       </div>
+
+      <ConfirmModal
+        isOpen={showLogoutModal}
+        message="Вы точно хотите выйти?"
+        onConfirm={handleLogoutConfirm}
+        onCancel={handleLogoutCancel}
+      />
+      <style>{`
+        .logout-btn {
+          padding: 10px 20px;
+          background-color: #f44336;
+          color: white;
+          border: none;
+          border-radius: 8px;
+          font-size: 14px;
+          font-weight: 600;
+          cursor: pointer;
+          transition: all 0.2s ease;
+          white-space: nowrap;
+        }
+
+        .logout-btn:hover {
+          background-color: #d32f2f;
+          transform: translateY(-1px);
+          box-shadow: 0 4px 12px rgba(244, 67, 54, 0.3);
+        }
+
+        .logout-btn:active {
+          transform: translateY(0);
+        }
+      `}</style>
     </div>
   );
 };

@@ -380,7 +380,7 @@ const AnalyticsPage = () => {
           </div>
           
           <div className="sick-top-groups">
-            <h3>Топ 10 групп с наибольшим процентом болеющих</h3>
+            <h3>Топ 10 классов с наибольшим процентом болеющих</h3>
             <div className="sick-groups-list">
               {topSickGroups.map((group, index) => (
                 <div key={group.groupId} className="sick-group-item">
@@ -398,7 +398,7 @@ const AnalyticsPage = () => {
           {/* Бар-чарт */}
           <section className="chart-section">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-              <h2>Посещаемость по группам</h2>
+              <h2>Посещаемость по классам</h2>
               <select
                 value={chartSortOrder}
                 onChange={(e) => setChartSortOrder(e.target.value)}
@@ -433,7 +433,7 @@ const AnalyticsPage = () => {
                         />
                       </div>
                       <div className="bar-footer">
-                        {group.studentsCount} студентов
+                        {group.studentsCount} учеников
                       </div>
                     </div>
                   );
@@ -460,8 +460,8 @@ const AnalyticsPage = () => {
                 <table className="analytics-table">
                   <thead>
                     <tr>
-                      <th>Группа</th>
-                      <th>Студентов</th>
+                      <th>Класс</th>
+                      <th>Учеников</th>
                       <th>Посещаемость</th>
                       <th>Статус</th>
                     </tr>

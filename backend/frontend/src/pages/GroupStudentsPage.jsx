@@ -10,9 +10,6 @@ const GroupStudentsPage = () => {
   const [group, setGroup] = useState(null);
   const [students, setStudents] = useState([]);
   const [statuses, setStatuses] = useState({});
-  // Храним количество секунд таймера опоздания для каждого студента
-  const [lateMinutes, setLateMinutes] = useState({});
-  const [lateTimers, setLateTimers] = useState({}); // Для хранения id таймеров по студентам
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
@@ -24,7 +21,6 @@ const GroupStudentsPage = () => {
   const [schedule, setSchedule] = useState([]);
   const [currentPair, setCurrentPair] = useState(null);
   const prevPairRef = useRef(null);
-  const [openOrderDropdown, setOpenOrderDropdown] = useState({});
   const [customStart, setCustomStart] = useState('');
   const [customEnd, setCustomEnd] = useState('');
   const [showCustomDates, setShowCustomDates] = useState(false);
@@ -114,7 +110,7 @@ const GroupStudentsPage = () => {
         headers: { ...authHeaders() },
       });
 
-      if (!res.ok) throw new Error("Не удалось загрузить студентов");
+      if (!res.ok) throw new Error("Не удалось загрузить учеников");
       const data = await res.json();
 
       const list = data.filter((s) => String(s.groupId) === String(id));
@@ -130,15 +126,10 @@ const GroupStudentsPage = () => {
       );
 
       let initial = {};
-      let initialLateMinutes = {};
       if (logRes.ok) {
         const logs = await logRes.json();
         logs.forEach((item) => {
           initial[item.studentId] = item.status || "none";
-          if (item.status === "LATE" && item.lateMinutes !== null && item.lateMinutes !== undefined) {
-            // В БД лежат минуты опоздания, для таймера переводим в секунды
-            initialLateMinutes[item.studentId] = item.lateMinutes * 60;
-          }
         });
       }
 
@@ -146,7 +137,6 @@ const GroupStudentsPage = () => {
         if (!initial[s.id]) initial[s.id] = "none";
       });
       setStatuses(initial);
-      setLateMinutes(initialLateMinutes);
     } catch (err) {
       console.error(err);
       setMessage("Ошибка загрузки данных");
@@ -166,12 +156,6 @@ const GroupStudentsPage = () => {
     setUser(getUser());
     if (id) fetchData();
     fetchSchedule();
-    // При размонтировании страницы — очищаем все таймеры
-    return () => {
-      Object.values(lateTimers).forEach((timerId) => {
-        clearInterval(timerId);
-      });
-    };
   }, [id]);
 
   const timeToMinutes = (str) => {
@@ -219,11 +203,6 @@ const GroupStudentsPage = () => {
           });
           return reset;
         });
-
-        // Очищаем таймеры опозданий (если были)
-        Object.values(lateTimers).forEach(clearInterval);
-        setLateTimers({});
-        setLateMinutes({});
       }
     };
 
@@ -242,24 +221,7 @@ const GroupStudentsPage = () => {
     }
 
     const currentStatus = statuses[studentId] || "none";
-
-    // Для всех статусов, включая LATE: обычное переключение (без таймера)
     const newStatus = currentStatus === status ? "none" : status;
-
-    // Если до этого был статус LATE — останавливаем таймер и сбрасываем минуты
-    if (currentStatus === "LATE" && lateTimers[studentId]) {
-      clearInterval(lateTimers[studentId]);
-      setLateTimers((prev) => {
-        const copy = { ...prev };
-        delete copy[studentId];
-        return copy;
-      });
-      setLateMinutes((prev) => {
-        const copy = { ...prev };
-        delete copy[studentId];
-        return copy;
-      });
-    }
 
     setStatuses((prev) => ({
       ...prev,
@@ -273,15 +235,11 @@ const GroupStudentsPage = () => {
       if (st === "PRESENT") acc.present++;
       else if (st === "ABSENT") acc.absent++;
       else if (st === "SICK") acc.sick++;
-      else if (st === "VALID_ABSENT") acc.valid++;
-      else if (st === "ITHUB") acc.wsk++;
-      else if (st === "DUAL") acc.dual++;
-      else if (st === "LATE") acc.late++;
       else if (st === "REMOTE") acc.remote++;
       else acc.none++;
       return acc;
     },
-    { present: 0, absent: 0, sick: 0, valid: 0, wsk: 0, dual: 0, late: 0, remote: 0, none: 0 }
+    { present: 0, absent: 0, sick: 0, remote: 0, none: 0 }
   );
 
   const handleSave = async () => {
@@ -295,9 +253,19 @@ const GroupStudentsPage = () => {
     }
 
     if (!currentPair) {
-      setMessage("Нет текущей пары — отметка недоступна");
+      setMessage("Сейчас не время урока. Пожалуйста, сохраните посещаемость во время урока согласно расписанию.");
+      setTimeout(() => setMessage(""), 5000);
       return;
     }
+
+    // Находим правильный lessonId из расписания для текущей пары
+    const now = new Date();
+    const day = now.getDay();
+    const dayOfWeek = day === 0 ? 7 : day;
+    const currentLesson = schedule.find(
+      (s) => s.dayOfWeek === dayOfWeek && s.pairNumber === currentPair
+    );
+    const lessonId = currentLesson ? currentLesson.id : null;
 
     const records = Object.entries(statuses)
       .filter(([, v]) => v && v !== "none")
@@ -307,7 +275,7 @@ const GroupStudentsPage = () => {
           groupId: id,
           date: today,
           status,
-          lessonId: currentPair  // ←←← ДОБАВЬ ЭТУ СТРОКУ
+          lessonId: lessonId
         };
 
         // Для LATE, если нужно (но у тебя таймер выключен)
@@ -336,7 +304,8 @@ const GroupStudentsPage = () => {
         setMessage("Посещаемость сохранена!");
         fetchData(); // обновляем
         window.dispatchEvent(new Event("attendanceSaved"));
-        navigate("/dashboard", { state: { scrollToGroupId: id } });
+        // Передаем номер пары для автоматического выбора при возврате
+        navigate("/dashboard", { state: { scrollToGroupId: id, selectedPair: currentPair } });
       } else {
         const err = await response.json();
         setMessage(err.error || "Ошибка сохранения");
@@ -388,7 +357,7 @@ const GroupStudentsPage = () => {
       const link = document.createElement('a');
       link.href = url;
 
-      let filename = `посещаемость_${group?.name || 'группа'}`;
+      let filename = `посещаемость_${group?.name || 'класс'}`;
       if (exportPeriod === 'custom') {
         filename += `_${customStart.replace(/-/g, '.')}_по_${customEnd.replace(/-/g, '.')}`;
       } else {
@@ -415,8 +384,8 @@ const GroupStudentsPage = () => {
     }
   };
 
-  if (loading) return <div className="loading">Загрузка группы...</div>;
-  if (!group) return <div>Группа не найдена</div>;
+  if (loading) return <div className="loading">Загрузка класса...</div>;
+  if (!group) return <div>Класс не найден</div>;
 
   return (
     <>
@@ -425,11 +394,11 @@ const GroupStudentsPage = () => {
           ← Назад
         </button>
 
-        <h1>Группа {group.name}</h1>
+        <h1>Класс {group.name}</h1>
         <p className="total">
-          Всего студентов: {students.length} · Сегодня: {today}
-          {currentPair !== null && <strong> · Текущая пара: {currentPair}</strong>}
-          {currentPair === null && <em> · Пара не определена (вне расписания)</em>}
+          Всего учеников: {students.length} · Сегодня: {today}
+          {currentPair !== null && <strong> · Текущий урок: {currentPair}</strong>}
+          {currentPair === null && <em> · Урок не определен (вне расписания)</em>}
         </p>
         {user?.role === 'HEAD' && (
           <div className="export-group-container">
@@ -491,6 +460,24 @@ const GroupStudentsPage = () => {
           </div>
         )}
 
+        {/* Всплывающее уведомление */}
+        {message && (
+          <div className={`notification-toast ${message.includes('не время урока') ? 'error' : message.includes('сохранена') ? 'success' : 'info'}`}>
+            <div className="notification-content">
+              <span className="notification-icon">
+                {message.includes('не время урока') ? '⚠️' : message.includes('сохранена') ? '✓' : 'ℹ️'}
+              </span>
+              <span className="notification-text">{message}</span>
+              <button 
+                className="notification-close"
+                onClick={() => setMessage("")}
+              >
+                ×
+              </button>
+            </div>
+          </div>
+        )}
+
         <div className="students-list">
           {students.map((student) => {
             const currentStatus = statuses[student.id] || "none";
@@ -514,63 +501,12 @@ const GroupStudentsPage = () => {
                     Больничный
                   </button>
                   <button
-                    className={`status-btn dual ${currentStatus === "DUAL" ? "active" : ""}`}
-                    onClick={() => toggleStatus(student.id, "DUAL")}
-                    disabled={isPractice || isWeekendOrHoliday}
-                  >
-                    Дуальное обучение
-                  </button>
-                  <button
-                    className={`status-btn wsk ${currentStatus === "ITHUB" ? "active" : ""}`}
-                    onClick={() => toggleStatus(student.id, "ITHUB")}
-                    disabled={isPractice || isWeekendOrHoliday}
-                  >
-                    IT HUB
-                  </button>
-                  <button
                     className={`status-btn remote ${currentStatus === "REMOTE" ? "active" : ""}`}
                     onClick={() => toggleStatus(student.id, "REMOTE")}
                     disabled={isPractice || isWeekendOrHoliday}
                   >
-                    Дистант
+                    Дистанционно
                   </button>
-                  <div className="status-dropdown-container">
-                    <button
-                      className={`status-btn dropdown-btn ${currentStatus === "VALID_ABSENT" || currentStatus === "LATE" ? "active" : ""}`}
-                      onClick={() => setOpenOrderDropdown(prev => ({
-                        ...prev,
-                        [student.id]: !prev[student.id]
-                      }))}
-                      disabled={isPractice || isWeekendOrHoliday}
-                    >
-                      {currentStatus === "VALID_ABSENT" ? "По приказу" : currentStatus === "LATE" ? "По заявлению" : "Ув. Причина"}
-                      <span className="dropdown-arrow-btn">▼</span>
-                    </button>
-                    {openOrderDropdown[student.id] && (
-                      <div className="status-dropdown-menu">
-                        <button
-                          className={`status-dropdown-item ${currentStatus === "VALID_ABSENT" ? "active" : ""}`}
-                          onClick={() => {
-                            toggleStatus(student.id, "VALID_ABSENT");
-                            setOpenOrderDropdown(prev => ({ ...prev, [student.id]: false }));
-                          }}
-                          disabled={isPractice || isWeekendOrHoliday}
-                        >
-                          По приказу
-                        </button>
-                        <button
-                          className={`status-dropdown-item ${currentStatus === "LATE" ? "active" : ""}`}
-                          onClick={() => {
-                            toggleStatus(student.id, "LATE");
-                            setOpenOrderDropdown(prev => ({ ...prev, [student.id]: false }));
-                          }}
-                          disabled={isPractice || isWeekendOrHoliday}
-                        >
-                          По заявлению
-                        </button>
-                      </div>
-                    )}
-                  </div>
                   <button
                     className={`status-btn absent ${currentStatus === "ABSENT" ? "active" : ""}`}
                     onClick={() => toggleStatus(student.id, "ABSENT")}
@@ -589,12 +525,8 @@ const GroupStudentsPage = () => {
           <div className="stats-summary">
             <span className="stat-item present">Присутствует {counts.present}</span>
             <span className="stat-item sick">Больничный {counts.sick}</span>
-            <span className="stat-item dual">Дуальное обучение {counts.dual}</span>
-            <span className="stat-item wsk">IT HUB {counts.wsk}</span>
-            <span className="stat-item valid">По приказу {counts.valid}</span>
-            <span className="stat-item late">По заявлению {counts.late}</span>
+            <span className="stat-item remote">Дистанционно {counts.remote}</span>
             <span className="stat-item absent">Без причины {counts.absent}</span>
-            <span className="stat-item remote">Дистант {counts.remote}</span>
             <span className="stat-item unmarked">Не отмечено {counts.none}</span>
           </div>
 
@@ -921,6 +853,88 @@ const GroupStudentsPage = () => {
           background: #e3f2fd;
           border: 1px solid #2196f3;
           color: #1565c0;
+        }
+
+        .notification-toast {
+          position: fixed;
+          top: 20px;
+          left: 50%;
+          transform: translateX(-50%);
+          z-index: 10000;
+          min-width: 400px;
+          max-width: 90%;
+          animation: slideDown 0.3s ease-out;
+        }
+
+        .notification-toast.error {
+          background: #ffebee;
+          border: 2px solid #f44336;
+          color: #c62828;
+        }
+
+        .notification-toast.success {
+          background: #e8f5e9;
+          border: 2px solid #4caf50;
+          color: #2e7d32;
+        }
+
+        .notification-toast.info {
+          background: #e3f2fd;
+          border: 2px solid #2196f3;
+          color: #1565c0;
+        }
+
+        .notification-content {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          padding: 16px 20px;
+          border-radius: 12px;
+          box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+        }
+
+        .notification-icon {
+          font-size: 24px;
+          flex-shrink: 0;
+        }
+
+        .notification-text {
+          flex: 1;
+          font-size: 15px;
+          font-weight: 500;
+          line-height: 1.4;
+        }
+
+        .notification-close {
+          background: none;
+          border: none;
+          font-size: 28px;
+          color: inherit;
+          cursor: pointer;
+          padding: 0;
+          width: 24px;
+          height: 24px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          opacity: 0.7;
+          transition: opacity 0.2s;
+          flex-shrink: 0;
+        }
+
+        .notification-close:hover {
+          opacity: 1;
+        }
+
+        @keyframes slideDown {
+          from {
+            opacity: 0;
+            transform: translateX(-50%) translateY(-20px);
+          }
+          to {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+          }
         }
 
         .save-btn:hover:not(:disabled) {

@@ -55,7 +55,7 @@ const QrScanner = () => {
       <div id="reader" style={{ borderRadius: '10px', overflow: 'hidden' }}></div>
       
       <p style={{ textAlign: 'center', marginTop: '15px', color: '#666', fontSize: '14px' }}>
-        Наведите камеру на QR-код, чтобы отметиться на паре
+        Наведите камеру на QR-код, чтобы отметиться на уроке
       </p>
     </div>
   );

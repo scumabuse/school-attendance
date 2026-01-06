@@ -10,7 +10,8 @@ const HeadTabs = ({ children }) => {
   
   const isAnalytics = location.pathname === '/dashboard/analytics';
   const isStudents = location.pathname === '/head/students';
-  const isGroups = !isAnalytics && !isStudents; // Если не аналитика и не студенты, то группы
+  const isSchedule = location.pathname === '/head/schedule';
+  const isGroups = !isAnalytics && !isStudents && !isSchedule; // Если не аналитика, не студенты и не расписание, то группы
 
   return (
     <div className="head-tabs-container">
@@ -31,8 +32,16 @@ const HeadTabs = ({ children }) => {
           className={`tab-button ${isStudents ? 'active' : ''}`}
           onClick={() => navigate('/head/students')}
         >
-          Студенты
+          Ученики
         </button>
+        {user?.role === 'HEAD' && (
+          <button
+            className={`tab-button ${isSchedule ? 'active' : ''}`}
+            onClick={() => navigate('/head/schedule')}
+          >
+            Расписание
+          </button>
+        )}
 
         {user?.role === 'ADMIN' && (
         <button
