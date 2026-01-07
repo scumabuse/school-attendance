@@ -418,19 +418,44 @@ const TeacherDashboard = () => {
                   >
                     <div className="group-header">
                       <h3>Класс {group.name}</h3>
-                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
-                        <span className="student-count">
-                          {group.students.length} Учеников
-                        </span>
-                        {teacher?.role === 'HEAD' && stats.attendancePercent !== undefined && (
-                          <span style={{
-                            fontSize: '16px',
-                            fontWeight: 'bold',
-                            color: stats.attendancePercent >= 80 ? '#4caf50' : stats.attendancePercent >= 60 ? '#ff9800' : '#f44336'
-                          }}>
-                            {stats.attendancePercent !== null ? `${stats.attendancePercent}%` : '—'}
+                      <div style={{ display: 'flex', gap: '16px', alignItems: 'flex-end' }}>
+                        {teacher?.role === 'HEAD' && (() => {
+                          const sickPercent = group.students.length > 0 
+                            ? Math.round((stats.sick || 0) / group.students.length * 100) 
+                            : 0;
+                          return (
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '2px' }}>
+                              <span style={{
+                                fontSize: '11px',
+                                color: '#666',
+                                fontWeight: 'normal'
+                              }}>
+                                % Бол.
+                              </span>
+                              <span style={{
+                                fontSize: '16px',
+                                fontWeight: 'bold',
+                                color: '#ff9800'
+                              }}>
+                                {sickPercent}%
+                              </span>
+                            </div>
+                          );
+                        })()}
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
+                          <span className="student-count">
+                            {group.students.length} Учеников
                           </span>
-                        )}
+                          {teacher?.role === 'HEAD' && stats.attendancePercent !== undefined && (
+                            <span style={{
+                              fontSize: '16px',
+                              fontWeight: 'bold',
+                              color: stats.attendancePercent >= 80 ? '#4caf50' : stats.attendancePercent >= 60 ? '#ff9800' : '#f44336'
+                            }}>
+                              {stats.attendancePercent !== null ? `${stats.attendancePercent}%` : '—'}
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </div>
 
