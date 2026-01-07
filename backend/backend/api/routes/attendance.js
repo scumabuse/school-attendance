@@ -565,24 +565,83 @@ router.post('/batch', async (req, res) => {
       try {
         const { studentId, groupId, date, status, lessonId } = record;
         const cleanDate = normalizeAttendanceDate(date);
+        
+        // Нормализуем lessonId: если передан, преобразуем в число, иначе null
+        const normalizedLessonId = (lessonId !== undefined && lessonId !== null && lessonId !== '') 
+          ? parseInt(lessonId, 10) 
+          : null;
+        
+        // Проверяем, что lessonId - валидное число (если не null)
+        if (normalizedLessonId !== null && isNaN(normalizedLessonId)) {
+          throw new Error(`Некорректный lessonId: ${lessonId}`);
+        }
 
-        const existing = await prisma.attendance.findUnique({
-          where: { studentId_date_lessonId: { studentId, date: cleanDate, lessonId: lessonId || null } }
+        // Сначала пытаемся найти запись с нужным lessonId
+        let existing = await prisma.attendance.findUnique({
+          where: { 
+            studentId_date_lessonId: { 
+              studentId, 
+              date: cleanDate, 
+              lessonId: normalizedLessonId 
+            } 
+          }
         });
 
+        // Если не нашли, ищем любую запись для этого студента на эту дату
+        if (!existing) {
+          existing = await prisma.attendance.findFirst({
+            where: {
+              studentId,
+              date: cleanDate
+            }
+          });
+        }
+
+        // Если статус REMOTE, используем ITHUB (так как БД не поддерживает REMOTE, а ITHUB редко используется)
+        let statusToSave = status;
+        if (status === 'REMOTE') {
+          statusToSave = 'ITHUB'; // Используем ITHUB вместо REMOTE (ITHUB есть в БД и редко используется)
+        }
+
         if (existing) {
-          await prisma.attendance.update({
-            where: { id: existing.id },
-            data: { status, updatedById: req.user.id, lessonId: lessonId || null }
-          });
-          updated++;
+          // Обновляем существующую запись
+          try {
+            await prisma.attendance.update({
+              where: { id: existing.id },
+              data: { 
+                status: statusToSave, 
+                updatedById: req.user.id, 
+                lessonId: normalizedLessonId 
+              }
+            });
+            updated++;
+          } catch (updateErr) {
+            throw updateErr;
+          }
         } else {
-          await prisma.attendance.create({
-            data: { studentId, groupId, date: cleanDate, status, updatedById: req.user.id, lessonId: lessonId || null }
-          });
-          created++;
+          // Создаем новую запись
+          try {
+            await prisma.attendance.create({
+              data: { 
+                studentId, 
+                groupId, 
+                date: cleanDate, 
+                status: statusToSave, 
+                updatedById: req.user.id, 
+                lessonId: normalizedLessonId 
+              }
+            });
+            created++;
+          } catch (createErr) {
+            throw createErr;
+          }
         }
       } catch (err) {
+        console.error('Ошибка обработки записи посещаемости:', {
+          record,
+          error: err.message,
+          stack: err.stack
+        });
         errors.push(`Ошибка обработки записи ${JSON.stringify(record)}: ${err.message}`);
       }
     }

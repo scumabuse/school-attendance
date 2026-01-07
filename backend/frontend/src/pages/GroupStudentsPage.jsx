@@ -119,18 +119,70 @@ const GroupStudentsPage = () => {
       setGroup(groupInfo);
       setStudents(list);
 
-      // Загрузка текущей посещаемости
+      // Определяем lessonId для текущей пары (если есть)
+      let lessonIdForQuery = null;
+      const pairToUse = currentPair !== null ? currentPair : detectCurrentPair();
+      if (pairToUse && schedule.length > 0) {
+        const now = new Date();
+        const day = now.getDay();
+        const dayOfWeek = day === 0 ? 7 : day;
+        const currentLesson = schedule.find(
+          (s) => s.dayOfWeek === dayOfWeek && s.pairNumber === pairToUse
+        );
+        if (currentLesson) {
+          lessonIdForQuery = currentLesson.id;
+        }
+      }
+
+      // Загружаем все записи для даты, но приоритет отдаем записям с текущим lessonId
       const logRes = await fetch(
-        `${API_URL}/attendance?groupId=${id}&date=${today}`,
+        `${API_URL}/attendance/log?groupId=${id}&date=${today}`,
         { headers: { ...authHeaders() } }
       );
 
       let initial = {};
       if (logRes.ok) {
         const logs = await logRes.json();
-        logs.forEach((item) => {
-          initial[item.studentId] = item.status || "none";
-        });
+        console.log('=== ЗАГРУЗКА ДАННЫХ ===');
+        console.log('Всего записей в логах:', logs.length);
+        console.log('lessonId для запроса:', lessonIdForQuery);
+        console.log('Логи:', logs);
+        
+        // Если есть текущий lessonId, показываем только записи с этим lessonId
+        // Иначе показываем все записи (берем последнюю для каждого студента)
+        if (lessonIdForQuery !== null) {
+          // Фильтруем только записи с текущим lessonId
+          const filteredLogs = logs.filter(item => item.lessonId === lessonIdForQuery);
+          console.log('Отфильтрованные записи с lessonId:', filteredLogs.length, filteredLogs);
+          filteredLogs.forEach((item) => {
+            // Маппим ITHUB обратно в REMOTE для отображения (ITHUB используется для хранения REMOTE в БД)
+            const displayStatus = item.status === 'ITHUB' ? 'REMOTE' : item.status;
+            initial[item.studentId] = displayStatus || "none";
+          });
+        } else {
+          // Берем последнюю запись для каждого студента
+          const studentRecords = {};
+          logs.forEach((item) => {
+            const sid = item.studentId;
+            if (!studentRecords[sid]) {
+              studentRecords[sid] = item;
+            } else {
+              // Берем более новую запись
+              const currentTime = new Date(item.updatedAt || item.date);
+              const storedTime = new Date(studentRecords[sid].updatedAt || studentRecords[sid].date);
+              if (currentTime > storedTime) {
+                studentRecords[sid] = item;
+              }
+            }
+          });
+          console.log('Сгруппированные записи:', Object.values(studentRecords));
+          Object.values(studentRecords).forEach((item) => {
+            // Маппим ITHUB обратно в REMOTE для отображения (ITHUB используется для хранения REMOTE в БД)
+            const displayStatus = item.status === 'ITHUB' ? 'REMOTE' : item.status;
+            initial[item.studentId] = displayStatus || "none";
+          });
+        }
+        console.log('Итоговые статусы:', initial);
       }
 
       list.forEach((s) => {
@@ -151,12 +203,6 @@ const GroupStudentsPage = () => {
     const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
     setCustomStart(weekAgo);
   }, []);
-
-  useEffect(() => {
-    setUser(getUser());
-    if (id) fetchData();
-    fetchSchedule();
-  }, [id]);
 
   const timeToMinutes = (str) => {
     if (!str || !str.includes(":")) return null;
@@ -184,6 +230,14 @@ const GroupStudentsPage = () => {
     return null;
   };
 
+  useEffect(() => {
+    setUser(getUser());
+    if (id) {
+      fetchData();
+      fetchSchedule();
+    }
+  }, [id]);
+
   // Сбрасываем отметки при смене пары
   useEffect(() => {
     if (students.length === 0 || schedule.length === 0) return;
@@ -203,6 +257,9 @@ const GroupStudentsPage = () => {
           });
           return reset;
         });
+
+        // Перезагружаем данные для новой пары
+        fetchData();
       }
     };
 
@@ -243,16 +300,25 @@ const GroupStudentsPage = () => {
   );
 
   const handleSave = async () => {
+    console.log('=== НАЖАТА КНОПКА СОХРАНЕНИЯ ===');
+    console.log('saving:', saving);
+    console.log('counts.none:', counts.none, 'students.length:', students.length);
+    console.log('isWeekendOrHoliday:', isWeekendOrHoliday);
+    console.log('isPractice:', isPractice);
+    console.log('currentPair:', currentPair);
+    
     setMessage("");
 
     // Проверка на выходной/праздник/практику
     if (isWeekendOrHoliday || isPractice) {
+      console.log('Блокировка: выходной или практика');
       setMessage(`Нельзя сохранить посещаемость: ${blockReason || practiceReason}`);
       setTimeout(() => setMessage(""), 3000);
       return;
     }
 
     if (!currentPair) {
+      console.log('Блокировка: нет текущей пары');
       setMessage("Сейчас не время урока. Пожалуйста, сохраните посещаемость во время урока согласно расписанию.");
       setTimeout(() => setMessage(""), 5000);
       return;
@@ -262,10 +328,19 @@ const GroupStudentsPage = () => {
     const now = new Date();
     const day = now.getDay();
     const dayOfWeek = day === 0 ? 7 : day;
+    console.log('Поиск урока: dayOfWeek=', dayOfWeek, 'currentPair=', currentPair, 'schedule.length=', schedule.length);
     const currentLesson = schedule.find(
       (s) => s.dayOfWeek === dayOfWeek && s.pairNumber === currentPair
     );
     const lessonId = currentLesson ? currentLesson.id : null;
+    console.log('Найденный урок:', currentLesson, 'lessonId:', lessonId);
+    
+    if (!lessonId) {
+      console.warn('ВНИМАНИЕ: lessonId не найден! Это может быть проблемой.');
+      setMessage("Ошибка: не найден урок в расписании. Попробуйте обновить страницу.");
+      setTimeout(() => setMessage(""), 5000);
+      return;
+    }
 
     const records = Object.entries(statuses)
       .filter(([, v]) => v && v !== "none")
@@ -282,6 +357,13 @@ const GroupStudentsPage = () => {
         return record;
       });
 
+    console.log('=== СОХРАНЕНИЕ ПОСЕЩАЕМОСТИ ===');
+    console.log('Текущая пара:', currentPair);
+    console.log('lessonId:', lessonId);
+    console.log('Статусы:', statuses);
+    console.log('Записей для сохранения:', records.length);
+    console.log('Записи:', records);
+
     if (records.length === 0) {
       setMessage("Никто не отмечен");
       return;
@@ -290,6 +372,7 @@ const GroupStudentsPage = () => {
     try {
       setSaving(true);
 
+      console.log('Отправка запроса на сохранение...');
       const response = await fetch(`${API_URL}/attendance/batch`, {
         method: "POST",
         headers: {
@@ -299,18 +382,46 @@ const GroupStudentsPage = () => {
         body: JSON.stringify({ records }),
       });
 
+      console.log('Ответ сервера:', response.status, response.statusText);
+
+      const result = await response.json();
+      console.log('Результат сохранения:', result);
+
       if (response.ok) {
-        const result = await response.json();
-        setMessage("Посещаемость сохранена!");
-        fetchData(); // обновляем
+        // Проверяем, были ли сохранены записи
+        const totalSaved = (result.created || 0) + (result.updated || 0);
+        
+        if (result.errors && result.errors.length > 0 && totalSaved === 0) {
+          // Полный провал - ничего не сохранили
+          console.error('ОШИБКИ ПРИ СОХРАНЕНИИ:', result.errors);
+          const errorPreview = result.errors.slice(0, 3).join('; ');
+          setMessage(`Ошибка сохранения: ${errorPreview}`);
+          setTimeout(() => setMessage(""), 10000);
+          return;
+        }
+        
+        // Успех или частичный успех - делаем редирект
+        if (result.warning) {
+          setMessage(result.warning);
+        } else {
+          setMessage("Посещаемость сохранена!");
+        }
+        
+        // Отправляем событие перед навигацией
         window.dispatchEvent(new Event("attendanceSaved"));
-        // Передаем номер пары для автоматического выбора при возврате
-        navigate("/dashboard", { state: { scrollToGroupId: id, selectedPair: currentPair } });
+        // Небольшая задержка для гарантии сохранения данных
+        setTimeout(() => {
+          // Передаем номер пары для автоматического выбора при возврате
+          navigate("/dashboard", { state: { scrollToGroupId: id, selectedPair: currentPair } });
+        }, 500);
       } else {
-        const err = await response.json();
-        setMessage(err.error || "Ошибка сохранения");
+        console.error('Ошибка сохранения:', result);
+        const errorMessage = result.error || result.errors?.join('; ') || "Ошибка сохранения";
+        setMessage(`Ошибка сохранения: ${errorMessage}`);
+        setTimeout(() => setMessage(""), 10000);
       }
     } catch (err) {
+      console.error('Исключение при сохранении:', err);
       setMessage("Нет соединения с сервером");
     } finally {
       setSaving(false);

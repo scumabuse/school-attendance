@@ -711,37 +711,88 @@ app.post('/api/attendance/batch', authenticate, async (req, res) => {
 
   for (const record of records) {
     try {
-      const { studentId, groupId, date, status } = record;
+      const { studentId, groupId, date, status, lessonId } = record;
       const cleanDate = normalizeAttendanceDate(date);
       console.log('--- ATTENDANCE DATE DEBUG ---');
       console.log('RAW FROM FRONT:', date);
       console.log('CLEAN (ISO):', cleanDate.toISOString());
       console.log('CLEAN (LOCAL):', cleanDate.toString());
+      console.log('lessonId:', lessonId);
       console.log('------------------------------');
 
+      // Используем правильный уникальный ключ с lessonId
+      const whereClause = {
+        studentId_date_lessonId: {
+          studentId,
+          date: cleanDate,
+          lessonId: lessonId || null
+        }
+      };
 
       const existing = await prisma.attendance.findUnique({
-        where: { studentId_date: { studentId, date: cleanDate } }
+        where: whereClause
       });
 
+      // Если статус REMOTE, используем ITHUB (так как БД не поддерживает REMOTE, а ITHUB редко используется)
+      let statusToSave = status;
+      if (status === 'REMOTE') {
+        statusToSave = 'ITHUB'; // Используем ITHUB вместо REMOTE (ITHUB есть в БД и редко используется)
+        console.log('REMOTE статус заменен на ITHUB для записи:', record);
+      }
+
       if (existing) {
+        // Обновляем существующую запись
         await prisma.attendance.update({
           where: { id: existing.id },
-          data: { status, updatedById: req.user.id }
+          data: { 
+            status: statusToSave, 
+            updatedById: req.user.id,
+            lessonId: lessonId || null
+          }
         });
         updated++;
       } else {
+        // Создаем новую запись
         await prisma.attendance.create({
-          data: { studentId, groupId, date: cleanDate, status, updatedById: req.user.id }
+          data: { 
+            studentId, 
+            groupId, 
+            date: cleanDate, 
+            status: statusToSave, 
+            updatedById: req.user.id,
+            lessonId: lessonId || null
+          }
         });
         created++;
       }
     } catch (err) {
-      errors.push(`Ошибка: ${err.message}`);
+      console.error('Ошибка обработки записи', JSON.stringify(record), ':', err);
+      errors.push(`Ошибка обработки записи ${JSON.stringify(record)}: ${err.message}`);
     }
   }
 
-  res.json({ created, updated, errors: errors.length > 0 ? errors : undefined });
+  // Если есть ошибки, но хотя бы часть записей сохранена - возвращаем успех с предупреждением
+  if (errors.length > 0) {
+    if (created > 0 || updated > 0) {
+      // Частичный успех - сохранили что-то, но были ошибки
+      return res.status(200).json({ 
+        created, 
+        updated, 
+        errors,
+        warning: `Сохранено ${created + updated} записей, но были ошибки: ${errors.slice(0, 3).join('; ')}`
+      });
+    } else {
+      // Полный провал - ничего не сохранили
+      return res.status(400).json({ 
+        created, 
+        updated, 
+        errors,
+        error: `Ошибка сохранения: ${errors.slice(0, 3).join('; ')}`
+      });
+    }
+  }
+
+  res.json({ created, updated, errors: undefined });
 });
 
 // ===================================
@@ -1286,4 +1337,5 @@ app.patch('/api/admin/holidays/:id', authenticate, isHeadOrAdmin, async (req, re
   }
 });
 
+console.log(chalk.bold.green('Сервер готов к бою.'));
 console.log(chalk.bold.green('Сервер готов к бою.'));

@@ -152,8 +152,12 @@ const StudentDashboard = () => {
                     label = "По приказу";
                     color = "#1565c0";
                   } else if (item.status === "ITHUB") {
-                    label = "IT HUB";
-                    color = "#7b1fa2";
+                    // ITHUB используется для хранения REMOTE в БД (так как REMOTE не поддерживается БД)
+                    label = "Дистанционно";
+                    color = "#512da8";
+                  } else if (item.status === "REMOTE") {
+                    label = "Дистанционно";
+                    color = "#512da8";
                   } else if (item.status === "DUAL") {
                     label = "Дуальное";
                     color = "#0277bd";

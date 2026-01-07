@@ -154,7 +154,8 @@ const TeacherDashboard = () => {
             if (log.status === "PRESENT") stats.present += 1;
             if (log.status === "ABSENT") stats.absent += 1;
             if (log.status === "SICK") stats.sick += 1;
-            if (log.status === "REMOTE") stats.remote += 1;
+            // ITHUB используется для хранения REMOTE в БД (так как REMOTE не поддерживается БД)
+            if (log.status === "REMOTE" || log.status === "ITHUB") stats.remote += 1;
           }
         });
 
@@ -219,9 +220,16 @@ const TeacherDashboard = () => {
     };
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
+    // Обновляем данные при сохранении посещаемости
+    const handleAttendanceSaved = () => {
+      fetchData();
+    };
+    window.addEventListener('attendanceSaved', handleAttendanceSaved);
+
     return () => {
       window.removeEventListener('focus', handleFocus);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('attendanceSaved', handleAttendanceSaved);
     };
   }, []);
 
@@ -246,13 +254,19 @@ const TeacherDashboard = () => {
     return filtered;
   };
 
-  // Получаем пары для отображения (1-7 сначала, затем 0)
+  // Получаем пары для отображения (все уроки из расписания)
   const getPairsToDisplay = () => {
+    // Получаем текущий день недели
+    const now = new Date();
+    const day = now.getDay();
+    const dayOfWeek = day === 0 ? 7 : day; // Пн=1 ... Вс=7
+    
+    // Фильтруем уроки для текущего дня недели (исключаем классный час с pairNumber === 0)
     const pairs = schedule
-      .filter(lesson => lesson.pairNumber >= 1 && lesson.pairNumber <= 7)
+      .filter(lesson => lesson.dayOfWeek === dayOfWeek && lesson.pairNumber >= 1)
       .sort((a, b) => a.pairNumber - b.pairNumber);
     
-    const classHour = schedule.find(lesson => lesson.pairNumber === 0);
+    const classHour = schedule.find(lesson => lesson.dayOfWeek === dayOfWeek && lesson.pairNumber === 0);
     
     return { pairs, classHour };
   };
@@ -291,6 +305,7 @@ const TeacherDashboard = () => {
 
     if (stateGroupId) {
       pendingScrollGroupRef.current = stateGroupId;
+      // Данные обновятся через событие attendanceSaved
     } else if (storedGroupId) {
       pendingScrollGroupRef.current = storedGroupId;
       if (storedScroll) {
@@ -306,8 +321,11 @@ const TeacherDashboard = () => {
   // Устанавливаем первую пару по умолчанию, если selectedPair не установлен и есть расписание
   useEffect(() => {
     if (selectedPair === null && schedule.length > 0) {
+      const now = new Date();
+      const day = now.getDay();
+      const dayOfWeek = day === 0 ? 7 : day;
       const firstPair = schedule
-        .filter(lesson => lesson.pairNumber >= 1 && lesson.pairNumber <= 7)
+        .filter(lesson => lesson.dayOfWeek === dayOfWeek && lesson.pairNumber >= 1)
         .sort((a, b) => a.pairNumber - b.pairNumber)[0];
       if (firstPair) {
         setSelectedPair(firstPair.pairNumber);

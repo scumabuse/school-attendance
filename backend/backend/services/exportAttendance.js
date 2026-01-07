@@ -11,11 +11,11 @@ const STATUS_MAP = {
   PRESENT: 'П',
   ABSENT: 'О',
   SICK: 'Б',
-  ITHUB: 'IT',
+  ITHUB: 'Дис',
   VALID_ABSENT: 'У',
   DUAL: 'Д',
   LATE: 'ОП',
-  REMOTE: 'Дис'
+  REMOTE: 'IT'
 };
 
 const STATUS_COLORS = {
@@ -23,10 +23,10 @@ const STATUS_COLORS = {
   'О': 'FF6868',
   'Б': 'FFFFCC00',
   'У': '507CFF',
-  'IT': 'C300FF',
+  'Дис': 'C300FF',
   'Д': 'FFADD8E6',
   'ОП': 'FFFFA500',
-  'Дис': 'FFD1C4E9',
+  'IT': 'FFD1C4E9',
   'Пр': 'FFADD8E6',
   'Вых': 'FFDDDDDD'
 };
