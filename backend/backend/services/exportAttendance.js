@@ -76,7 +76,7 @@ async function exportAttendanceService(prisma, req, res) {
     });
 
     if (!students.length) {
-      return res.status(404).json({ error: 'Студенты не найдены' });
+      return res.status(404).json({ error: 'Ученики не найдены' });
     }
 
     const attendance = await prisma.attendance.findMany({
@@ -122,7 +122,7 @@ async function exportAttendanceService(prisma, req, res) {
 
     sheet.columns = [
       { header: 'ФИО', key: 'name', width: 30 },
-      { header: 'Группа', key: 'group', width: 12 },
+      { header: 'Класс', key: 'group', width: 12 },
       ...academicDays.map(d => ({
         header: DateTime.fromISO(d).toFormat('dd.MM'),
         key: d,
