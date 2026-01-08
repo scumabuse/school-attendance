@@ -342,6 +342,8 @@ const HeadStudentsPage = () => {
           border-radius: 12px;
           box-shadow: 0 6px 18px rgba(0, 0, 0, 0.06);
           overflow: hidden;
+          width: 100%;
+          position: relative;
         }
 
         .students-header,
@@ -352,6 +354,20 @@ const HeadStudentsPage = () => {
           padding: 10px 14px;
           align-items: center;
           font-size: 14px;
+          box-sizing: border-box;
+        }
+
+        .students-header span,
+        .students-row span {
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+
+        .students-row span:nth-child(2) {
+          white-space: normal;
+          word-break: break-word;
+          overflow-wrap: break-word;
         }
 
         .students-header {
@@ -404,23 +420,248 @@ const HeadStudentsPage = () => {
         }
 
         @media (max-width: 800px) {
+          .head-students-page {
+            padding: 16px 12px;
+          }
+
           .filters {
             flex-direction: column;
             align-items: stretch;
+            gap: 10px;
           }
 
           .search-box {
             width: 100%;
+            min-width: 100%;
+            max-width: 100%;
+          }
+
+          select {
+            width: 100%;
+            min-width: 100%;
+          }
+
+          .students-table {
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
           }
 
           .students-header,
           .students-row {
-            grid-template-columns: 40px 3fr 2fr 60px 0 70px;
+            grid-template-columns: 35px minmax(120px, 2fr) minmax(60px, 1fr) minmax(50px, 0.8fr) minmax(40px, 0.6fr) minmax(65px, 0.9fr);
+            gap: 6px;
+            padding: 10px 8px;
+            font-size: 13px;
+            min-width: 600px;
           }
 
           .students-header span:last-child,
           .students-row span:last-child {
             display: inline-block;
+            min-width: 65px;
+            text-align: right;
+            white-space: nowrap;
+            padding-left: 4px;
+            box-sizing: border-box;
+          }
+
+          .students-header span:nth-child(5),
+          .students-row span:nth-child(5) {
+            min-width: 40px;
+            text-align: center;
+            white-space: nowrap;
+            padding: 0 2px;
+            box-sizing: border-box;
+          }
+
+          .students-header span,
+          .students-row span {
+            overflow: visible;
+          }
+        }
+
+        @media (max-width: 640px) {
+          .head-students-page {
+            padding: 12px 8px;
+          }
+
+          h1 {
+            font-size: 22px;
+            margin-bottom: 6px;
+          }
+
+          .subtitle {
+            font-size: 13px;
+            margin-bottom: 16px;
+          }
+
+          .back-btn {
+            font-size: 16px;
+            margin-bottom: 12px;
+          }
+
+          .filters {
+            gap: 8px;
+          }
+
+          .search-box input,
+          select {
+            padding: 8px 10px;
+            font-size: 13px;
+          }
+
+          .students-table {
+            border-radius: 8px;
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+          }
+
+          .students-header,
+          .students-row {
+            grid-template-columns: 30px minmax(140px, 2.5fr) minmax(55px, 1fr) minmax(45px, 0.7fr) minmax(35px, 0.5fr) minmax(60px, 0.8fr);
+            gap: 5px;
+            padding: 8px 6px;
+            font-size: 12px;
+            min-width: 600px;
+          }
+
+          .students-header span,
+          .students-row span {
+            word-break: break-word;
+            overflow-wrap: break-word;
+          }
+
+          .students-header span:last-child,
+          .students-row span:last-child {
+            min-width: 60px;
+            font-weight: 600;
+            font-size: 12px;
+          }
+
+          .students-header span:nth-child(5),
+          .students-row span:nth-child(5) {
+            min-width: 35px;
+            font-weight: 500;
+          }
+
+          .pagination {
+            flex-wrap: wrap;
+            gap: 8px;
+            font-size: 12px;
+          }
+
+          .pagination button {
+            padding: 6px 10px;
+            font-size: 12px;
+          }
+        }
+
+        @media (max-width: 480px) {
+          .head-students-page {
+            padding: 10px 6px;
+          }
+
+          h1 {
+            font-size: 20px;
+          }
+
+          .subtitle {
+            font-size: 12px;
+          }
+
+          .students-header,
+          .students-row {
+            grid-template-columns: 28px minmax(150px, 3fr) minmax(50px, 0.9fr) minmax(40px, 0.6fr) minmax(32px, 0.4fr) minmax(55px, 0.7fr);
+            gap: 4px;
+            padding: 7px 5px;
+            font-size: 11px;
+            min-width: 550px;
+          }
+
+          .students-header span:last-child,
+          .students-row span:last-child {
+            min-width: 55px;
+            font-size: 11px;
+            padding-left: 2px;
+          }
+
+          .students-header span:nth-child(5),
+          .students-row span:nth-child(5) {
+            min-width: 32px;
+            font-size: 11px;
+          }
+
+          .students-header span:nth-child(2),
+          .students-row span:nth-child(2) {
+            min-width: 150px;
+          }
+        }
+
+        @media (max-width: 360px) {
+          .head-students-page {
+            padding: 8px 4px;
+          }
+
+          h1 {
+            font-size: 18px;
+          }
+
+          .students-header,
+          .students-row {
+            grid-template-columns: 25px minmax(130px, 3fr) minmax(45px, 0.8fr) minmax(35px, 0.5fr) minmax(30px, 0.35fr) minmax(50px, 0.65fr);
+            gap: 3px;
+            padding: 6px 4px;
+            font-size: 10px;
+            min-width: 500px;
+          }
+
+          .students-header span:last-child,
+          .students-row span:last-child {
+            min-width: 50px;
+            font-size: 10px;
+            padding-left: 3px;
+          }
+
+          .students-header span:nth-child(5),
+          .students-row span:nth-child(5) {
+            min-width: 30px;
+            font-size: 10px;
+            padding: 0 1px;
+          }
+
+          .pagination {
+            font-size: 11px;
+          }
+
+          .pagination button {
+            padding: 5px 8px;
+            font-size: 11px;
+          }
+        }
+
+        /* Дополнительные улучшения для очень маленьких экранов */
+        @media (max-width: 320px) {
+          .head-students-page {
+            padding: 6px 3px;
+          }
+
+          .students-header,
+          .students-row {
+            min-width: 480px;
+            gap: 2px;
+            padding: 5px 3px;
+          }
+
+          .students-header span:last-child,
+          .students-row span:last-child {
+            min-width: 48px;
+            font-size: 9px;
+          }
+
+          .students-header span:nth-child(5),
+          .students-row span:nth-child(5) {
+            min-width: 28px;
+            font-size: 9px;
           }
         }
       `}</style>

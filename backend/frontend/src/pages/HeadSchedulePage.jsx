@@ -51,6 +51,7 @@ const HeadSchedulePage = () => {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [user, setUser] = useState(null);
+  const [selectedShift, setSelectedShift] = useState(1); // 1 = первая смена, 2 = вторая смена
   const [savedTemplates, setSavedTemplates] = useState([]);
   const [selectedTemplate, setSelectedTemplate] = useState(null);
   const [showSaveTemplateModal, setShowSaveTemplateModal] = useState(false);
@@ -84,11 +85,36 @@ const HeadSchedulePage = () => {
   const fetchSchedules = async () => {
     try {
       setLoading(true);
-      const res = await fetch(`${API_URL}/schedule`, {
-        headers: { ...authHeaders() },
-      });
-      if (!res.ok) throw new Error("Не удалось загрузить расписание");
-      const data = await res.json();
+      let data = [];
+      
+      if (selectedShift === 1) {
+        // Первая смена - загружаем из БД
+        const res = await fetch(`${API_URL}/schedule`, {
+          headers: { ...authHeaders() },
+        });
+        if (!res.ok) throw new Error("Не удалось загрузить расписание");
+        const allData = await res.json();
+        // Фильтруем только первую смену (до 14:00) - ОБЯЗАТЕЛЬНО фильтруем
+        data = allData.filter(lesson => {
+          if (!lesson.startTime) return true; // Пустые тоже берем
+          const startHour = parseInt(lesson.startTime.split(':')[0] || '0', 10);
+          return startHour < 14; // Только первая смена
+        });
+      } else if (selectedShift === 2) {
+        // Вторая смена - загружаем ТОЛЬКО из localStorage, убираем 9 урок
+        const saved = localStorage.getItem('schedule_shift_2');
+        if (saved) {
+          try {
+            data = JSON.parse(saved).filter(item => item.pairNumber <= 8);
+          } catch (e) {
+            console.error('Ошибка загрузки второй смены из localStorage:', e);
+            data = [];
+          }
+        } else {
+          data = [];
+        }
+      }
+      
       setSchedules(data);
     } catch (err) {
       console.error(err);
@@ -116,17 +142,46 @@ const HeadSchedulePage = () => {
   const handleSave = async () => {
     try {
       setSaving(true);
-      const res = await fetch(`${API_URL}/schedule`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          ...authHeaders(),
-        },
-        body: JSON.stringify({ items: schedules }),
-      });
-      if (!res.ok) throw new Error("Не удалось сохранить расписание");
-      setMessage("Сохранено");
-      fetchSchedules();
+      
+      if (selectedShift === 1) {
+        // Первая смена - сохраняем в БД только первую смену (время < 14:00)
+        // Убираем shift если он есть и фильтруем только первую смену
+        const itemsToSave = schedules
+          .map(({ shift, ...item }) => item)
+          .filter(item => {
+            // Если нет времени начала, не сохраняем (чтобы не затирать существующие данные)
+            if (!item.startTime || !item.startTime.trim()) return false;
+            const startHour = parseInt(item.startTime.split(':')[0] || '0', 10);
+            // Сохраняем только записи первой смены (до 14:00)
+            return startHour < 14;
+          });
+        
+        // Не сохраняем, если нет данных для сохранения
+        if (itemsToSave.length === 0) {
+          setMessage("Нет данных для сохранения");
+          return;
+        }
+        
+        const res = await fetch(`${API_URL}/schedule`, {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            ...authHeaders(),
+          },
+          body: JSON.stringify({ items: itemsToSave }),
+        });
+        if (!res.ok) throw new Error("Не удалось сохранить расписание");
+        setMessage("Сохранено");
+      } else if (selectedShift === 2) {
+        // Вторая смена - сохраняем ТОЛЬКО в localStorage, убираем 9 урок
+        // НИКОГДА не трогаем БД при сохранении второй смены
+        const filteredSchedules = schedules.filter(s => s.pairNumber <= 8);
+        localStorage.setItem('schedule_shift_2', JSON.stringify(filteredSchedules));
+        setMessage("Сохранено");
+      }
+      
+      // Перезагружаем расписание после сохранения
+      await fetchSchedules();
     } catch (err) {
       console.error(err);
       setMessage(err.message || "Ошибка сохранения");
@@ -137,19 +192,84 @@ const HeadSchedulePage = () => {
   };
 
   const handleSeed = async () => {
-    const items = ensureDefaults();
+    let items;
+    if (selectedShift === 1) {
+      // Для первой смены используем стандартное расписание
+      items = ensureDefaults();
+    } else {
+      // Для второй смены генерируем тестовые времена (начинаем с 14:00)
+      items = [];
+      for (let dayOfWeek = 1; dayOfWeek <= 5; dayOfWeek++) {
+        // Классный час только в понедельник
+        if (dayOfWeek === 1) {
+          items.push({ dayOfWeek: 1, pairNumber: 0, startTime: "14:00", endTime: "14:25" });
+        }
+        // Генерируем пары с последовательными временами (начинаем с 14:30, максимум 8 уроков)
+        let currentHour = 14;
+        let currentMinute = 30;
+        for (let pairNumber = 1; pairNumber <= 8; pairNumber++) {
+          const startTime = `${String(currentHour).padStart(2, '0')}:${String(currentMinute).padStart(2, '0')}`;
+          // Конец через 45 минут
+          let endMinute = currentMinute + 45;
+          let endHour = currentHour;
+          if (endMinute >= 60) {
+            endHour += 1;
+            endMinute -= 60;
+          }
+          if (endHour > 23) {
+            endHour = 23;
+            endMinute = 59;
+          }
+          const endTime = `${String(endHour).padStart(2, '0')}:${String(endMinute).padStart(2, '0')}`;
+          items.push({ dayOfWeek, pairNumber, startTime, endTime });
+          
+          // Следующая пара начинается через 10 минут после окончания предыдущей
+          currentMinute = endMinute + 10;
+          currentHour = endHour;
+          if (currentMinute >= 60) {
+            currentHour += 1;
+            currentMinute -= 60;
+          }
+          if (currentHour > 23) {
+            currentHour = 23;
+            currentMinute = 59;
+          }
+        }
+      }
+    }
     try {
       setSaving(true);
-      const res = await fetch(`${API_URL}/schedule`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          ...authHeaders(),
-        },
-        body: JSON.stringify({ items }),
-      });
-      if (!res.ok) throw new Error("Не удалось применить расписание по умолчанию");
-      setMessage("Заполнено по умолчанию");
+      
+      if (selectedShift === 1) {
+        // Первая смена - сохраняем в БД только первую смену (время < 14:00)
+        // Убираем shift если он есть и фильтруем первую смену
+        const itemsToSave = items
+          .map(({ shift, ...item }) => item)
+          .filter(item => {
+            if (!item.startTime || !item.startTime.trim()) return false;
+            const startHour = parseInt(item.startTime.split(':')[0] || '0', 10);
+            // Только первая смена (до 14:00)
+            return startHour < 14;
+          });
+        
+        const res = await fetch(`${API_URL}/schedule`, {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            ...authHeaders(),
+          },
+          body: JSON.stringify({ items: itemsToSave }),
+        });
+        if (!res.ok) throw new Error("Не удалось применить расписание по умолчанию");
+        setMessage("Заполнено по умолчанию");
+      } else if (selectedShift === 2) {
+        // Вторая смена - сохраняем ТОЛЬКО в localStorage, убираем 9 урок
+        // НИКОГДА не трогаем БД при сохранении второй смены
+        const filteredItems = items.filter(item => item.pairNumber <= 8);
+        localStorage.setItem('schedule_shift_2', JSON.stringify(filteredItems));
+        setMessage("Заполнено по умолчанию");
+      }
+      
       fetchSchedules();
     } catch (err) {
       console.error(err);
@@ -201,16 +321,34 @@ const HeadSchedulePage = () => {
   const handleApplyTemplate = async (template) => {
     try {
       setSaving(true);
-      const res = await fetch(`${API_URL}/schedule`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          ...authHeaders(),
-        },
-        body: JSON.stringify({ items: template.schedules }),
-      });
-      if (!res.ok) throw new Error("Не удалось применить шаблон");
-      setMessage(`Шаблон "${template.name}" применен`);
+      
+      if (selectedShift === 1) {
+        // Первая смена - применяем в БД, фильтруем только первую смену (время < 14:00)
+        const itemsToSave = template.schedules
+          .map(({ shift, ...item }) => item)
+          .filter(item => {
+            if (!item.startTime) return true;
+            const startHour = parseInt(item.startTime.split(':')[0] || '0', 10);
+            return startHour < 14; // Только первая смена
+          });
+        
+        const res = await fetch(`${API_URL}/schedule`, {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            ...authHeaders(),
+          },
+          body: JSON.stringify({ items: itemsToSave }),
+        });
+        if (!res.ok) throw new Error("Не удалось применить шаблон");
+        setMessage(`Шаблон "${template.name}" применен`);
+      } else if (selectedShift === 2) {
+        // Вторая смена - применяем в localStorage, убираем 9 урок
+        const filteredSchedules = template.schedules.filter(s => s.pairNumber <= 8);
+        localStorage.setItem('schedule_shift_2', JSON.stringify(filteredSchedules));
+        setMessage(`Шаблон "${template.name}" применен`);
+      }
+      
       fetchSchedules();
     } catch (err) {
       console.error(err);
@@ -223,14 +361,14 @@ const HeadSchedulePage = () => {
 
   useEffect(() => {
     fetchSchedules();
-  }, []);
+  }, [selectedShift]); // Перезагружаем расписание при смене смены
 
   if (loading) return <div className="loading">Загрузка расписания...</div>;
 
   const groups = grouped();
 
   const renderDay = (dayOfWeek) => {
-    const rows = groups[dayOfWeek] || [];
+      const rows = groups[dayOfWeek] || [];
     // Если пусто — показываем строки 0..7 для ввода
     const pairNumbers = rows.length > 0 ? rows.map((r) => r.pairNumber) : [];
     const baseList =
@@ -292,16 +430,27 @@ const HeadSchedulePage = () => {
             <h1>Расписание уроков</h1>
             <p className="subtitle">Управление временем уроков (сокращёнки, замены)</p>
           </div>
-          <div className="actions">
-            <button className="secondary" onClick={handleSeed} disabled={saving}>
-              По умолчанию
-            </button>
-            <button className="secondary" onClick={() => setShowSaveTemplateModal(true)} disabled={saving}>
-              Сохранить шаблон
-            </button>
-            <button className="primary" onClick={handleSave} disabled={saving}>
-              {saving ? "Сохранение..." : "Применить"}
-            </button>
+          <div className="header-controls">
+            {/* Фильтр смены */}
+            <select
+              value={selectedShift}
+              onChange={(e) => setSelectedShift(parseInt(e.target.value, 10))}
+              className="shift-select"
+            >
+              <option value={1}>1 смена</option>
+              <option value={2}>2 смена</option>
+            </select>
+            <div className="actions">
+              <button className="secondary" onClick={handleSeed} disabled={saving}>
+                По умолчанию
+              </button>
+              <button className="secondary" onClick={() => setShowSaveTemplateModal(true)} disabled={saving}>
+                Сохранить шаблон
+              </button>
+              <button className="primary" onClick={handleSave} disabled={saving}>
+                {saving ? "Сохранение..." : "Применить"}
+              </button>
+            </div>
           </div>
         </div>
         
@@ -390,6 +539,20 @@ const HeadSchedulePage = () => {
           align-items: center;
           margin-bottom: 16px;
           gap: 12px;
+        }
+        .header-controls {
+          display: flex;
+          gap: 12px;
+          align-items: center;
+        }
+        .shift-select {
+          padding: 10px 16px;
+          border-radius: 8px;
+          border: 1px solid #ddd;
+          font-size: 14px;
+          font-weight: 600;
+          background: white;
+          cursor: pointer;
         }
         .actions {
           display: flex;
@@ -539,6 +702,104 @@ const HeadSchedulePage = () => {
           display: flex;
           gap: 10px;
           justify-content: flex-end;
+        }
+
+        /* Мобильная адаптивность */
+        @media (max-width: 768px) {
+          .head-schedule {
+            padding: 16px 12px;
+          }
+
+          .head-schedule__header {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 16px;
+          }
+
+          .header-controls {
+            flex-direction: column;
+            align-items: stretch;
+            width: 100%;
+            gap: 12px;
+          }
+
+          .shift-select {
+            width: 100%;
+            padding: 12px 16px;
+          }
+
+          .actions {
+            flex-direction: column;
+            width: 100%;
+            gap: 10px;
+          }
+
+          .actions button {
+            width: 100%;
+            padding: 12px 16px;
+            font-size: 14px;
+          }
+
+          .days-grid {
+            grid-template-columns: 1fr;
+            gap: 12px;
+          }
+
+          .templates-grid {
+            grid-template-columns: 1fr;
+          }
+
+          .modal-content {
+            min-width: 90%;
+            padding: 20px;
+          }
+
+          .modal-actions {
+            flex-direction: column;
+          }
+
+          .modal-actions button {
+            width: 100%;
+          }
+        }
+
+        @media (max-width: 480px) {
+          .head-schedule {
+            padding: 12px 8px;
+          }
+
+          .head-schedule__header h1 {
+            font-size: 20px;
+          }
+
+          .head-schedule__header .subtitle {
+            font-size: 13px;
+          }
+
+          .shift-select {
+            padding: 10px 14px;
+            font-size: 13px;
+          }
+
+          .actions button {
+            padding: 10px 14px;
+            font-size: 13px;
+          }
+
+          .day-card {
+            padding: 10px;
+          }
+
+          .schedule-table th,
+          .schedule-table td {
+            padding: 4px;
+            font-size: 12px;
+          }
+
+          .schedule-table input {
+            padding: 4px 6px;
+            font-size: 12px;
+          }
         }
       `}</style>
       {/* Плавающая кнопка QR для заведующей */}

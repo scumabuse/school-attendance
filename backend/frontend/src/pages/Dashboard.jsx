@@ -16,6 +16,7 @@ const TeacherDashboard = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedSpecialty, setSelectedSpecialty] = useState('Все');
   const [selectedCourse, setSelectedCourse] = useState('Все');
+  const [selectedShift, setSelectedShift] = useState(1); // 1 = первая смена, 2 = вторая смена
   const [selectedPair, setSelectedPair] = useState(null); // null = первая пара по умолчанию, число = конкретная пара
   const [schedule, setSchedule] = useState([]); // Расписание на сегодня
   const [attendanceByPair, setAttendanceByPair] = useState({}); // { lessonId: { groupId: stats } }
@@ -73,9 +74,36 @@ const TeacherDashboard = () => {
           return;
         }
 
-        const scheduleData = resSchedule.ok ? await resSchedule.json() : [];
+        let scheduleData = [];
         const dataStudents = await resStudents.json();
         const logs = resLogs.ok ? await resLogs.json() : [];
+
+        // Загружаем расписание в зависимости от выбранной смены
+        if (selectedShift === 1) {
+          // Первая смена - из БД
+          scheduleData = resSchedule.ok ? await resSchedule.json() : [];
+          // Фильтруем только первую смену (до 14:00)
+          scheduleData = scheduleData.filter(lesson => {
+            const startHour = parseInt(lesson.startTime?.split(':')[0] || '0', 10);
+            return startHour < 14; // Первая смена до 14:00
+          });
+        } else if (selectedShift === 2) {
+          // Вторая смена - из localStorage
+          const saved = localStorage.getItem('schedule_shift_2');
+          if (saved) {
+            try {
+              const allSchedules = JSON.parse(saved);
+              const now = new Date();
+              const day = now.getDay();
+              const dayOfWeek = day === 0 ? 7 : day;
+              // Фильтруем только расписание на сегодня
+              scheduleData = allSchedules.filter(lesson => lesson.dayOfWeek === dayOfWeek);
+            } catch (e) {
+              console.error('Ошибка загрузки второй смены из localStorage:', e);
+              scheduleData = [];
+            }
+          }
+        }
 
         setSchedule(scheduleData);
 
@@ -231,7 +259,7 @@ const TeacherDashboard = () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('attendanceSaved', handleAttendanceSaved);
     };
-  }, []);
+  }, [selectedShift]); // Перезагружаем данные при смене смены
 
   // Фильтрация групп
   const getFilteredGroups = () => {
@@ -551,6 +579,19 @@ const TeacherDashboard = () => {
               {course === 'Все' ? 'Все классы' : `${course} класс`}
             </option>
           ))}
+        </select>
+
+        {/* Фильтр смены */}
+        <select
+          value={selectedShift}
+          onChange={(e) => {
+            const newShift = parseInt(e.target.value, 10);
+            setSelectedShift(newShift);
+            setSelectedPair(null); // Сбрасываем выбранную пару при смене смены
+          }}
+        >
+          <option value={1}>1 смена</option>
+          <option value={2}>2 смена</option>
         </select>
 
         {/* Фильтр пар */}

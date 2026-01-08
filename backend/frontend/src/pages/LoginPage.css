@@ -14,10 +14,10 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background-image: url("../assets/logo2.png"); /* Тот же путь */
+  background-image: url("../assets/158234.png"); /* Тот же путь */
   background-repeat: no-repeat;
   background-position: center center;
-  background-size: 60% auto; /* Или 500px auto — фиксированный размер */
+  background-size: 50% auto; /* Или 500px auto — фиксированный размер */
   opacity: 0.15; /* Полупрозрачный — 0.1 до 0.3 на вкус */
   pointer-events: none; /* Не мешает кликам */
   z-index: 0;

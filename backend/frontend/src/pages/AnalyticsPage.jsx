@@ -270,8 +270,8 @@ const AnalyticsPage = () => {
                 ? `${customStart.replace(/-/g, '.')} → ${customEnd.replace(/-/g, '.')}`
                 : {
                   academic_year: 'Учебный год',
-                  semester1: '1 семестр',
-                  semester2: '2 семестр',
+                  semester1: '1 четверть',
+                  semester2: '2 четверть',
                   month: 'Текущий месяц',
                   week: 'Текущая неделя',
                   today: 'Текущий день'
@@ -301,8 +301,8 @@ const AnalyticsPage = () => {
                 <option value="today">Текущий день</option>
                 <option value="week">Текущая неделя</option>
                 <option value="month">Текущий месяц</option>
-                <option value="semester1">1 семестр</option>
-                <option value="semester2">2 семестр</option>
+                <option value="semester1">1 четверть</option>
+                <option value="semester2">2 четверть</option>
                 <option value="academic_year">Учебный год</option>
                 <option value="custom">Кастомный период ←</option>
               </select>

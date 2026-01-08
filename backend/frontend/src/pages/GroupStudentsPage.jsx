@@ -31,11 +31,25 @@ const GroupStudentsPage = () => {
 
   const fetchSchedule = async () => {
     try {
+      // Получаем расписание из БД (первая смена)
       const res = await fetch(`${API_URL}/schedule`, {
         headers: { ...authHeaders() },
       });
       if (!res.ok) throw new Error("Не удалось загрузить расписание");
-      const data = await res.json();
+      let data = await res.json();
+      
+      // Также загружаем вторую смену из localStorage и объединяем
+      const savedShift2 = localStorage.getItem('schedule_shift_2');
+      if (savedShift2) {
+        try {
+          const shift2Data = JSON.parse(savedShift2);
+          // Объединяем обе смены
+          data = [...data, ...shift2Data];
+        } catch (e) {
+          console.error('Ошибка загрузки второй смены из localStorage:', e);
+        }
+      }
+      
       setSchedule(data);
     } catch (err) {
       console.error("Ошибка загрузки расписания:", err);
@@ -525,8 +539,8 @@ const GroupStudentsPage = () => {
                 <option value="today">Сегодня</option>
                 <option value="week">Неделя</option>
                 <option value="month">Месяц</option>
-                <option value="semester1">1 семестр</option>
-                <option value="semester2">2 семестр</option>
+                <option value="semester1">1 четверть</option>
+                <option value="semester2">2 четверть</option>
                 <option value="academic_year">Учебный год</option>
                 <option value="custom">Кастомный период ←</option>
               </select>

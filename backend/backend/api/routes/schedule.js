@@ -86,6 +86,7 @@ router.put('/', async (req, res) => {
     const updated = [];
     for (const item of items) {
       const { dayOfWeek, pairNumber, startTime, endTime } = item;
+      // Игнорируем shift если он есть, так как его нет в БД
       if (
         typeof dayOfWeek !== 'number' ||
         typeof pairNumber !== 'number' ||
@@ -115,10 +116,12 @@ router.post('/seed-defaults', async (_req, res) => {
   try {
     const updated = [];
     for (const item of defaultSchedules) {
+      // Убираем shift если он есть
+      const { shift, ...itemWithoutShift } = item;
       const rec = await prisma.lessonSchedule.upsert({
         where: { dayOfWeek_pairNumber: { dayOfWeek: item.dayOfWeek, pairNumber: item.pairNumber } },
         update: { startTime: item.startTime, endTime: item.endTime },
-        create: item
+        create: itemWithoutShift
       });
       updated.push(rec);
     }
